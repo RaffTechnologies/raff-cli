@@ -54,7 +54,7 @@ raff configure --profile staging
 |----------|-------------|
 | `RAFF_API_URL` | API base URL |
 | `RAFF_API_KEY` | API key |
-| `RAFF_ACCOUNT_ID` | Default account ID |
+| `RAFF_PROJECT_ID` | Default project ID |
 
 ### Priority Order
 
@@ -66,8 +66,7 @@ CLI flag > environment variable > config file
 |------|-------------|
 | `--api-url` | API base URL |
 | `--api-key` | API key |
-| `--account-id` | Account ID |
-| `--project-id` | Project ID |
+| `--project-id` | Default project ID |
 | `-o, --output` | Output format: `table` (default) or `json` |
 
 ## Output Formats

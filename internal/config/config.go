@@ -13,7 +13,6 @@ import (
 type Profile struct {
 	APIURL    string `yaml:"api-url"`
 	APIKey    string `yaml:"api-key"`
-	AccountID string `yaml:"account-id,omitempty"`
 	ProjectID string `yaml:"project-id,omitempty"`
 }
 

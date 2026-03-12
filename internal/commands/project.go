@@ -1,27 +1,16 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
+	raff "github.com/rafftechnologies/raff-go"
+
 	"github.com/rafftechnologies/raff-cli/internal/output"
 	"github.com/spf13/cobra"
 )
-
-type project struct {
-	ID            string `json:"id"`
-	AccountID     string `json:"account_id"`
-	Name          string `json:"name"`
-	Slug          string `json:"slug"`
-	Description   string `json:"description"`
-	DefaultRegion string `json:"default_region"`
-	IsDefault     bool   `json:"is_default"`
-	IsActive      bool   `json:"is_active"`
-	CreatedBy     string `json:"created_by"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
-}
 
 func newProjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -50,20 +39,18 @@ func newProjectListCmd() *cobra.Command {
 				return err
 			}
 
-			path := fmt.Sprintf("/api/v1/projects?limit=%d&offset=%d", limit, offset)
-			resp, err := c.Get(path)
+			projects, _, err := c.Projects.List(context.Background(), &raff.ListOptions{
+				Limit:  limit,
+				Offset: offset,
+			})
 			if err != nil {
 				return err
 			}
 
 			if outputFormat() == output.FormatJSON {
-				output.PrintJSON(resp.Data)
+				data, _ := json.Marshal(projects)
+				output.PrintJSON(data)
 				return nil
-			}
-
-			var projects []project
-			if err := json.Unmarshal(resp.Data, &projects); err != nil {
-				return fmt.Errorf("parsing projects: %w", err)
 			}
 
 			t := output.NewTable("ID", "NAME", "SLUG", "REGION", "DEFAULT", "ACTIVE", "CREATED")
@@ -75,7 +62,7 @@ func newProjectListCmd() *cobra.Command {
 					p.DefaultRegion,
 					fmt.Sprintf("%v", p.IsDefault),
 					fmt.Sprintf("%v", p.IsActive),
-					formatTime(p.CreatedAt),
+					formatTime(p.CreatedAt.Format("2006-01-02T15:04:05Z")),
 				)
 			}
 			t.Flush()
@@ -101,22 +88,18 @@ func newProjectGetCmd() *cobra.Command {
 				return err
 			}
 
-			resp, err := c.Get("/api/v1/projects/" + args[0])
+			project, _, err := c.Projects.Get(context.Background(), args[0])
 			if err != nil {
 				return err
 			}
 
 			if outputFormat() == output.FormatJSON {
-				output.PrintJSON(resp.Data)
+				data, _ := json.Marshal(project)
+				output.PrintJSON(data)
 				return nil
 			}
 
-			var p project
-			if err := json.Unmarshal(resp.Data, &p); err != nil {
-				return fmt.Errorf("parsing project: %w", err)
-			}
-
-			printProjectDetail(p)
+			printProjectDetail(project)
 			return nil
 		},
 	}
@@ -136,31 +119,23 @@ func newProjectCreateCmd() *cobra.Command {
 				return err
 			}
 
-			body := map[string]string{"name": name}
-			if description != "" {
-				body["description"] = description
-			}
-			if region != "" {
-				body["default_region"] = region
-			}
-
-			resp, err := c.Post("/api/v1/projects", body)
+			project, _, err := c.Projects.Create(context.Background(), &raff.ProjectCreateRequest{
+				Name:          name,
+				Description:   description,
+				DefaultRegion: region,
+			})
 			if err != nil {
 				return err
 			}
 
 			if outputFormat() == output.FormatJSON {
-				output.PrintJSON(resp.Data)
+				data, _ := json.Marshal(project)
+				output.PrintJSON(data)
 				return nil
 			}
 
-			var p project
-			if err := json.Unmarshal(resp.Data, &p); err != nil {
-				return fmt.Errorf("parsing project: %w", err)
-			}
-
 			fmt.Println("Project created successfully.")
-			printProjectDetail(p)
+			printProjectDetail(project)
 			return nil
 		},
 	}
@@ -186,38 +161,34 @@ func newProjectUpdateCmd() *cobra.Command {
 				return err
 			}
 
-			body := make(map[string]string)
+			req := &raff.ProjectUpdateRequest{}
 			if cmd.Flags().Changed("name") {
-				body["name"] = name
+				req.Name = name
 			}
 			if cmd.Flags().Changed("description") {
-				body["description"] = description
+				req.Description = description
 			}
 			if cmd.Flags().Changed("region") {
-				body["default_region"] = region
+				req.DefaultRegion = region
 			}
 
-			if len(body) == 0 {
+			if req.Name == "" && req.Description == "" && req.DefaultRegion == "" {
 				return fmt.Errorf("at least one of --name, --description, or --region must be specified")
 			}
 
-			resp, err := c.Put("/api/v1/projects/"+args[0], body)
+			project, _, err := c.Projects.Update(context.Background(), args[0], req)
 			if err != nil {
 				return err
 			}
 
 			if outputFormat() == output.FormatJSON {
-				output.PrintJSON(resp.Data)
+				data, _ := json.Marshal(project)
+				output.PrintJSON(data)
 				return nil
 			}
 
-			var p project
-			if err := json.Unmarshal(resp.Data, &p); err != nil {
-				return fmt.Errorf("parsing project: %w", err)
-			}
-
 			fmt.Println("Project updated successfully.")
-			printProjectDetail(p)
+			printProjectDetail(project)
 			return nil
 		},
 	}
@@ -238,25 +209,20 @@ func newProjectDeleteCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			projectID := args[0]
+			ctx := context.Background()
+
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
 
 			if !force {
-				// Fetch project name for confirmation prompt
-				c, err := newClient()
+				project, _, err := c.Projects.Get(ctx, projectID)
 				if err != nil {
 					return err
 				}
 
-				resp, err := c.Get("/api/v1/projects/" + projectID)
-				if err != nil {
-					return err
-				}
-
-				var p project
-				if err := json.Unmarshal(resp.Data, &p); err != nil {
-					return fmt.Errorf("parsing project: %w", err)
-				}
-
-				fmt.Printf("Are you sure you want to delete project %q? [y/N]: ", p.Name)
+				fmt.Printf("Are you sure you want to delete project %q? [y/N]: ", project.Name)
 				var answer string
 				fmt.Scanln(&answer)
 				if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
@@ -265,30 +231,21 @@ func newProjectDeleteCmd() *cobra.Command {
 				}
 			}
 
-			c, err := newClient()
-			if err != nil {
-				return err
-			}
-
-			resp, err := c.Delete("/api/v1/projects/" + projectID)
+			_, err = c.Projects.Delete(ctx, projectID)
 			if err != nil {
 				return err
 			}
 
 			if outputFormat() == output.FormatJSON {
 				raw, _ := json.Marshal(map[string]any{
-					"success": resp.Success,
-					"message": resp.Message,
+					"success": true,
+					"message": "Project deleted successfully.",
 				})
 				output.PrintJSON(raw)
 				return nil
 			}
 
-			msg := resp.Message
-			if msg == "" {
-				msg = "Project deleted successfully."
-			}
-			fmt.Println(msg)
+			fmt.Println("Project deleted successfully.")
 			return nil
 		},
 	}
@@ -298,7 +255,7 @@ func newProjectDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-func printProjectDetail(p project) {
+func printProjectDetail(p *raff.Project) {
 	pairs := [][2]string{
 		{"ID", p.ID},
 		{"Name", p.Name},
@@ -307,7 +264,7 @@ func printProjectDetail(p project) {
 		{"Region", p.DefaultRegion},
 		{"Default", fmt.Sprintf("%v", p.IsDefault)},
 		{"Active", fmt.Sprintf("%v", p.IsActive)},
-		{"Created", formatTime(p.CreatedAt)},
+		{"Created", p.CreatedAt.Format("2006-01-02")},
 	}
 	output.PrintDetail(pairs)
 }

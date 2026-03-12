@@ -2,18 +2,22 @@ package commands
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"time"
 
-	"github.com/rafftechnologies/raff-cli/internal/client"
+	raff "github.com/rafftechnologies/raff-go"
+
 	"github.com/rafftechnologies/raff-cli/internal/config"
 	"github.com/rafftechnologies/raff-cli/internal/output"
 	"github.com/spf13/cobra"
 )
 
+const Version = "0.1.0"
+
 var (
 	flagAPIURL    string
 	flagAPIKey    string
-	flagAccountID string
 	flagProjectID string
 	flagOutput    string
 )
@@ -21,7 +25,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:     "raff",
 	Short:   "Raff CLI — manage cloud resources from the terminal",
-	Version: client.Version,
+	Version: Version,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -29,8 +33,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&flagAPIURL, "api-url", "", "API base URL (overrides config)")
 	rootCmd.PersistentFlags().StringVar(&flagAPIKey, "api-key", "", "API key (overrides config)")
-	rootCmd.PersistentFlags().StringVar(&flagAccountID, "account-id", "", "Account ID (overrides config)")
-	rootCmd.PersistentFlags().StringVar(&flagProjectID, "project-id", "", "Project ID (overrides config)")
+	rootCmd.PersistentFlags().StringVar(&flagProjectID, "project-id", "", "Default project ID (overrides config)")
 	rootCmd.PersistentFlags().StringVarP(&flagOutput, "output", "o", "table", "Output format: table or json")
 
 	rootCmd.AddCommand(newConfigureCmd())
@@ -45,8 +48,8 @@ func Execute() error {
 	return nil
 }
 
-// newClient builds an API client from resolved config values.
-func newClient() (*client.Client, error) {
+// newClient builds a raff-go API client from resolved config values.
+func newClient() (*raff.Client, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -54,19 +57,26 @@ func newClient() (*client.Client, error) {
 
 	profile := cfg.ActiveProfile()
 
-	apiURL := config.Resolve(flagAPIURL, "RAFF_API_URL", profile.APIURL)
 	apiKey := config.Resolve(flagAPIKey, "RAFF_API_KEY", profile.APIKey)
-	accountID := config.Resolve(flagAccountID, "RAFF_ACCOUNT_ID", profile.AccountID)
-
-	if apiURL == "" {
-		apiURL = "https://api.rafftechnologies.com"
-	}
-
 	if apiKey == "" {
 		return nil, fmt.Errorf("no API key configured. Run 'raff configure' or set RAFF_API_KEY")
 	}
 
-	return client.New(apiURL, apiKey, accountID), nil
+	opts := []raff.ClientOpt{
+		raff.SetUserAgent("raff-cli/" + Version),
+	}
+
+	apiURL := config.Resolve(flagAPIURL, "RAFF_API_URL", profile.APIURL)
+	if apiURL != "" {
+		opts = append(opts, raff.SetBaseURL(apiURL))
+	}
+
+	projectID := config.Resolve(flagProjectID, "RAFF_PROJECT_ID", profile.ProjectID)
+	if projectID != "" {
+		opts = append(opts, raff.SetProjectID(projectID))
+	}
+
+	return raff.New(&http.Client{Timeout: 30 * time.Second}, apiKey, opts...), nil
 }
 
 func outputFormat() output.Format {

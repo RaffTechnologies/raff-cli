@@ -1,7 +1,7 @@
 VERSION ?= 0.1.0
 BINARY := raff
 BUILD_DIR := ./bin
-LDFLAGS := -ldflags "-X github.com/rafftechnologies/raff-cli/internal/client.Version=$(VERSION)"
+LDFLAGS := -ldflags "-X github.com/rafftechnologies/raff-cli/internal/commands.Version=$(VERSION)"
 
 .PHONY: build install clean fmt lint test
 
