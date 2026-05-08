@@ -38,6 +38,10 @@ func init() {
 
 	rootCmd.AddCommand(newConfigureCmd())
 	rootCmd.AddCommand(newProjectCmd())
+	rootCmd.AddCommand(newVMCmd())
+	rootCmd.AddCommand(newVPCCmd())
+	rootCmd.AddCommand(newIPCmd())
+	rootCmd.AddCommand(newSGCmd())
 }
 
 func Execute() error {

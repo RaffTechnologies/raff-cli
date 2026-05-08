@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	raff "github.com/rafftechnologies/raff-go"
+	"github.com/rafftechnologies/raff-go/spec"
 
 	"github.com/rafftechnologies/raff-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -39,10 +40,11 @@ func newProjectListCmd() *cobra.Command {
 				return err
 			}
 
-			projects, _, err := c.Projects.List(context.Background(), &raff.ListOptions{
-				Limit:  limit,
-				Offset: offset,
-			})
+			opts := &raff.ProjectListOptions{
+				Limit:  raff.Int(limit),
+				Offset: raff.Int(offset),
+			}
+			projects, _, err := c.Projects.List(context.Background(), opts)
 			if err != nil {
 				return err
 			}
@@ -56,10 +58,10 @@ func newProjectListCmd() *cobra.Command {
 			t := output.NewTable("ID", "NAME", "SLUG", "REGION", "DEFAULT", "ACTIVE", "CREATED")
 			for _, p := range projects {
 				t.AddRow(
-					p.ID,
+					p.ID.String(),
 					p.Name,
 					p.Slug,
-					p.DefaultRegion,
+					string(p.DefaultRegion),
 					fmt.Sprintf("%v", p.IsDefault),
 					fmt.Sprintf("%v", p.IsActive),
 					formatTime(p.CreatedAt.Format("2006-01-02T15:04:05Z")),
@@ -119,11 +121,16 @@ func newProjectCreateCmd() *cobra.Command {
 				return err
 			}
 
-			project, _, err := c.Projects.Create(context.Background(), &raff.ProjectCreateRequest{
-				Name:          name,
-				Description:   description,
-				DefaultRegion: region,
-			})
+			req := &raff.CreateProjectRequest{Name: name}
+			if description != "" {
+				req.Description = raff.String(description)
+			}
+			if region != "" {
+				r := spec.CreateProjectRequestDefaultRegion(region)
+				req.DefaultRegion = &r
+			}
+
+			project, _, err := c.Projects.Create(context.Background(), req)
 			if err != nil {
 				return err
 			}
@@ -161,18 +168,23 @@ func newProjectUpdateCmd() *cobra.Command {
 				return err
 			}
 
-			req := &raff.ProjectUpdateRequest{}
+			req := &raff.UpdateProjectRequest{}
+			changed := false
 			if cmd.Flags().Changed("name") {
-				req.Name = name
+				req.Name = raff.String(name)
+				changed = true
 			}
 			if cmd.Flags().Changed("description") {
-				req.Description = description
+				req.Description = raff.String(description)
+				changed = true
 			}
 			if cmd.Flags().Changed("region") {
-				req.DefaultRegion = region
+				r := spec.UpdateProjectRequestDefaultRegion(region)
+				req.DefaultRegion = &r
+				changed = true
 			}
 
-			if req.Name == "" && req.Description == "" && req.DefaultRegion == "" {
+			if !changed {
 				return fmt.Errorf("at least one of --name, --description, or --region must be specified")
 			}
 
@@ -257,11 +269,11 @@ func newProjectDeleteCmd() *cobra.Command {
 
 func printProjectDetail(p *raff.Project) {
 	pairs := [][2]string{
-		{"ID", p.ID},
+		{"ID", p.ID.String()},
 		{"Name", p.Name},
 		{"Slug", p.Slug},
-		{"Description", p.Description},
-		{"Region", p.DefaultRegion},
+		{"Description", raff.StringValue(p.Description)},
+		{"Region", string(p.DefaultRegion)},
 		{"Default", fmt.Sprintf("%v", p.IsDefault)},
 		{"Active", fmt.Sprintf("%v", p.IsActive)},
 		{"Created", p.CreatedAt.Format("2006-01-02")},
