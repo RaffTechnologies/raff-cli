@@ -1,0 +1,46 @@
+name: release
+
+# Builds cross-platform binaries (linux, macos, windows × amd64, arm64) and
+# publishes them to a GitHub Release whenever a semver tag is pushed.
+#
+# To cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Customers install via:
+#   - Direct download from the Releases page (any OS)
+#   - `go install github.com/rafftechnologies/raff-cli/cmd/raff@v0.1.0`
+#
+# Note: raff-cli's go.mod has `replace ../raff-go` for local dev. The release
+# build runs `go mod tidy` first, but if raff-go has not been tagged at a
+# version that satisfies raff-cli's `require`, the build will fail. Tag raff-go
+# first, bump the require in raff-cli, then tag raff-cli.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

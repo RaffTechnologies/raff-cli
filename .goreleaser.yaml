@@ -1,0 +1,79 @@
+# GoReleaser config for raff-cli.
+# https://goreleaser.com — builds cross-platform binaries on tag and attaches
+# them to the GitHub Release. Modeled on doctl's setup.
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: raff
+    main: ./cmd/raff
+    binary: raff
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: raff
+    name_template: >-
+      raff_{{ .Version }}_
+      {{- if eq .Os "darwin" }}macos{{- else }}{{ .Os }}{{ end }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "arm64" }}arm64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'Merge pull request'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  github:
+    owner: RaffTechnologies
+    name: raff-cli
+  draft: false
+  prerelease: auto
+  name_template: "{{.Version}}"
