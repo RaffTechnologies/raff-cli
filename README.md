@@ -4,7 +4,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/rafftechnologies/raff-cli.svg)](https://pkg.go.dev/github.com/rafftechnologies/raff-cli)
 
 ```
-raff is a command-line interface (CLI) for the Raff Cloud API.
+Raff CLI — manage cloud resources from the terminal
 
 Usage:
   raff [command]
@@ -36,7 +36,7 @@ See the [full reference documentation](https://docs.rafftechnologies.com) for in
   - [Downloading a Release from GitHub](#downloading-a-release-from-github)
   - [Building the Development Version from Source](#building-the-development-version-from-source)
 - [Authenticating with Raff](#authenticating-with-raff)
-  - [Logging into multiple Raff accounts](#logging-into-multiple-raff-accounts)
+  - [Switching between multiple profiles](#switching-between-multiple-profiles)
 - [Configuring Default Values](#configuring-default-values)
   - [Environment Variables](#environment-variables)
 - [Enabling Shell Auto-Completion](#enabling-shell-auto-completion)
@@ -112,45 +112,53 @@ Requires Go 1.25+.
 
 ## Authenticating with Raff
 
-To use `raff`, you need to authenticate with Raff by providing an API key. Generate one in the dashboard at [rafftechnologies.com](https://rafftechnologies.com) under **Team & Projects → API Keys**.
+To use `raff`, you need an API key. Generate one in the dashboard at [rafftechnologies.com](https://rafftechnologies.com) under **Team & Projects → API Keys**.
 
-Authenticate with the `configure` command:
+Run the `configure` command to set up a profile:
 
 ```bash
 raff configure
 ```
 
-You'll be prompted to enter the API key:
+You'll be prompted for three fields, each with the existing value as the default (just press Enter to keep it):
 
 ```
-Raff API key: raff_pub_xxx
+API URL [https://api.rafftechnologies.com]:
+API Key [...]: raff_pub_xxx
+Default Project ID (optional) [...]: 11111111-2222-3333-4444-555555555555
 ```
 
-After entering the key, the credentials are validated against the API. If the token doesn't validate, double-check that you copied it correctly.
+When you finish, you'll see:
 
 ```
-Validating key: OK
+Profile "default" saved to /home/you/.raff/config.yaml
 ```
 
-This creates the necessary directory structure and configuration file to store your credentials at `~/.raff/config.yaml`.
+The active profile becomes the one you just configured. Subsequent `raff` commands read credentials from this file.
 
-### Logging into multiple Raff accounts
+> **Note:** `configure` does not currently validate the key against the API — it just saves to disk. The first real call (e.g. `raff project list`) will surface an auth error if the key is wrong.
 
-`raff` supports multiple authentication profiles so you can switch between accounts (or between staging/production keys) without re-entering credentials.
+### Switching between multiple profiles
 
-By default, a profile named `default` is used. To create a new profile:
+`raff` supports multiple profiles in the same config file so you can keep separate keys (e.g. staging vs production):
 
 ```bash
-raff configure --profile staging
+raff configure                    # writes/updates the "default" profile
+raff configure --profile staging  # writes/updates the "staging" profile and makes it active
+raff configure --profile default  # switch back to "default" (just press Enter through the prompts)
 ```
 
-Then pass the profile name to any `raff` command:
+Other commands (`vm list`, `vpc list`, …) do **not** take a `--profile` flag — they always use whichever profile is set as `current-profile` in `~/.raff/config.yaml`. To use a non-active profile for a single command, override with environment variables:
 
 ```bash
-raff vm list --profile staging
+RAFF_API_KEY=raff_pub_yyy RAFF_PROJECT_ID=<staging-project-uuid> raff vm list
 ```
 
-The `--api-key` flag and `RAFF_API_KEY` environment variable take precedence over any profile, so you can also override credentials per-command without changing your active profile.
+Or with command-line flags:
+
+```bash
+raff vm list --api-key raff_pub_yyy --project-id <staging-project-uuid>
+```
 
 ## Configuring Default Values
 
@@ -252,11 +260,10 @@ If you installed `raff` by downloading a release archive:
 sudo rm /usr/local/bin/raff
 ```
 
-If you installed via `go install`, remove the binary from `$GOBIN`:
+If you installed via `go install` or `make install`, remove the binary from your Go bin directory:
 
 ```bash
-rm $(go env GOBIN)/raff
-# or, if GOBIN is unset, $GOPATH/bin/raff
+rm "$(go env GOPATH)/bin/raff"
 ```
 
 To completely remove the configuration:
@@ -310,9 +317,9 @@ rm -rf ~/.raff
 
 - **Create a security group from a template:**
   ```bash
-  raff security-group templates                          # list templates
-  raff security-group create --name web --template-id allow-http
-  raff vm sg attach <vm-id> --sg-id <sg-id> --nic-id 0
+  raff security-group templates                          # list available template IDs
+  raff security-group create --name web --template-id web-server
+  raff vm sg attach <vm-id> --security-group-id <sg-id> --nic-id 0
   ```
 
 - **JSON output for scripting:**
