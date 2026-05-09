@@ -121,6 +121,18 @@ raff vm get <id> -o json | jq '.name'
 
 Semantic versioning. v0.x is allowed to introduce breaking flag/output changes; v1.0.0+ implies a stable CLI surface. See [CHANGELOG](https://github.com/RaffTechnologies/raff-cli/releases) for per-release details.
 
+## Documentation
+
+- **CLI reference** — `raff <command> --help` (every command and flag)
+- **API reference** — [docs.rafftechnologies.com](https://docs.rafftechnologies.com)
+- **Dashboard** — [rafftechnologies.com](https://rafftechnologies.com)
+- **Releases / changelog** — [github.com/RaffTechnologies/raff-cli/releases](https://github.com/RaffTechnologies/raff-cli/releases)
+
+## Related projects
+
+- [raff-go](https://github.com/RaffTechnologies/raff-go) — official Go SDK that powers this CLI
+- [terraform-provider-raff](https://github.com/RaffTechnologies/terraform-provider-raff) — official Terraform provider
+
 ## Contributing
 
 ```bash
