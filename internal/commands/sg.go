@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	raff "github.com/rafftechnologies/raff-go"
+	"github.com/rafftechnologies/raff-go/spec"
 
 	"github.com/rafftechnologies/raff-cli/internal/output"
 	"github.com/spf13/cobra"
@@ -22,6 +24,7 @@ func newSGCmd() *cobra.Command {
 	cmd.AddCommand(newSGTemplatesCmd())
 	cmd.AddCommand(newSGGetCmd())
 	cmd.AddCommand(newSGCreateCmd())
+	cmd.AddCommand(newSGUpdateCmd())
 	cmd.AddCommand(newSGDeleteCmd())
 	return cmd
 }
@@ -184,6 +187,72 @@ func newSGCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Description")
 	cmd.Flags().StringVar(&templateID, "template-id", "", "Seed from a template (see `raff security-group templates`)")
 	_ = cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+func newSGUpdateCmd() *cobra.Command {
+	var name, description, rulesFile string
+	cmd := &cobra.Command{
+		Use:   "update <sg-id>",
+		Short: "Update a security group's name, description, or rules",
+		Long: `Update a security group. At least one of --name, --description, or --rules-file
+must be provided. --rules-file replaces the entire rule set (the API does not
+support partial rule updates).
+
+Rules file format (JSON array, one object per rule):
+  [
+    {"rule_type":"inbound","protocol":"TCP","range":"22","ip":"","size":0},
+    {"rule_type":"inbound","protocol":"TCP","range":"80,443","ip":"","size":0},
+    {"rule_type":"outbound","protocol":"ALL"}
+  ]`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			req := &raff.UpdateSecurityGroupRequest{}
+			changed := false
+			if cmd.Flags().Changed("name") {
+				req.Name = raff.String(name)
+				changed = true
+			}
+			if cmd.Flags().Changed("description") {
+				req.Description = raff.String(description)
+				changed = true
+			}
+			if rulesFile != "" {
+				data, err := os.ReadFile(rulesFile)
+				if err != nil {
+					return fmt.Errorf("read rules file: %w", err)
+				}
+				var rules []spec.SecurityGroupRule
+				if err := json.Unmarshal(data, &rules); err != nil {
+					return fmt.Errorf("parse rules file: %w", err)
+				}
+				req.Rules = &rules
+				changed = true
+			}
+			if !changed {
+				return fmt.Errorf("at least one of --name, --description, or --rules-file must be specified")
+			}
+			sg, _, err := c.SecurityGroups.Update(context.Background(), args[0], req)
+			if err != nil {
+				return err
+			}
+			if outputFormat() == output.FormatJSON {
+				out, _ := json.Marshal(sg)
+				output.PrintJSON(out)
+				return nil
+			}
+			fmt.Println("Security group updated successfully.")
+			fmt.Printf("ID: %s\nName: %s\nRules: %d\n", sg.ID.String(), sg.Name, len(sg.Rules))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "New name")
+	cmd.Flags().StringVar(&description, "description", "", "New description")
+	cmd.Flags().StringVar(&rulesFile, "rules-file", "", "Path to JSON file containing the full rule set (replaces existing rules)")
 	return cmd
 }
 
