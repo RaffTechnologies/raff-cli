@@ -11,6 +11,7 @@ Usage:
 
 Available Commands:
   api-key        Manage API keys
+  backup         Manage VM backups (incl. `raff backup schedule`)
   completion     Generate the autocompletion script for the specified shell
   configure      Configure API credentials and defaults
   help           Help about any command
@@ -18,12 +19,17 @@ Available Commands:
   ip             Manage floating IPs
   member         Manage account-level members
   permission     List the permission catalog
+  pricing        Browse the public pricing catalog
   project        Manage projects (incl. `raff project member`)
+  region         List datacenter regions
   role           Manage IAM roles
   security-group Manage security groups
+  snapshot       Manage VM and volume snapshots
   ssh-key        Manage SSH keys
+  template       List OS templates
   version        Show the current version
   vm             Manage virtual machines
+  volume         Manage block storage volumes
   vpc            Manage virtual private clouds
 
 Flags:
@@ -74,17 +80,17 @@ Replace `linux_x86_64` with `linux_arm64`, `macos_x86_64`, or `macos_arm64` as n
 
 #### Pinning to a specific version
 
-Replace `0.2.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
+Replace `0.3.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
 
 ```bash
 # Linux x86_64
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.2.0/raff_0.2.0_linux_x86_64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.0/raff_0.3.0_linux_x86_64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
 ```bash
 # macOS arm64 (Apple Silicon)
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.2.0/raff_0.2.0_macos_arm64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.0/raff_0.3.0_macos_arm64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
@@ -360,6 +366,34 @@ rm -rf ~/.raff
   raff permission list --scope project
   raff role create --name "vm-operator" --slug vm-operator --scope project \
     --permission vm.read --permission vm.start --permission vm.stop
+  ```
+
+- **Attach a new volume to a VM at create time:**
+  ```bash
+  raff volume create \
+    --name data-vol \
+    --size 100 --type standard --region us-east \
+    --vm-id <vm-uuid>
+  ```
+
+- **Snapshot a VM before a risky change, restore later:**
+  ```bash
+  raff snapshot create --resource-type vm --resource-id <vm-uuid> --name pre-upgrade
+  raff snapshot restore <snapshot-id>      # prompts for confirmation
+  ```
+
+- **Set up daily backups on a VM, keep last 14:**
+  ```bash
+  raff backup schedule create \
+    --vm-id <vm-uuid> \
+    --frequency daily --time 03:00 --keep 14
+  ```
+
+- **Browse VM pricing, find the cheapest plan in a region:**
+  ```bash
+  raff pricing vm --region us-east --output json | jq 'min_by(.monthly_price)'
+  raff template list --category linux --vm-type standard
+  raff region list
   ```
 
 - **JSON output for scripting:**
