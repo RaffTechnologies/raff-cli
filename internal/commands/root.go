@@ -16,7 +16,7 @@ import (
 // Build-time injected via -ldflags by Makefile and goreleaser.
 // Defaults are sane fallbacks for `go install` users (no ldflags).
 var (
-	Version = "0.2.0"
+	Version = "0.3.0"
 	Commit  = ""
 	Date    = ""
 )
@@ -91,6 +91,12 @@ func init() {
 	rootCmd.AddCommand(newRoleCmd())
 	rootCmd.AddCommand(newPermissionCmd())
 	rootCmd.AddCommand(newInvitationCmd())
+	rootCmd.AddCommand(newVolumeCmd())
+	rootCmd.AddCommand(newSnapshotCmd())
+	rootCmd.AddCommand(newBackupCmd())
+	rootCmd.AddCommand(newRegionCmd())
+	rootCmd.AddCommand(newTemplateCmd())
+	rootCmd.AddCommand(newPricingCmd())
 }
 
 func Execute() error {

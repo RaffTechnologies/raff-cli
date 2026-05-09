@@ -4,7 +4,8 @@ go 1.25.4
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/rafftechnologies/raff-go v0.2.0
+	github.com/oapi-codegen/runtime v1.4.0
+	github.com/rafftechnologies/raff-go v0.3.0
 	github.com/spf13/cobra v1.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -12,6 +13,5 @@ require (
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/oapi-codegen/runtime v1.4.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 )
