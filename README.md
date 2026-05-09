@@ -10,12 +10,19 @@ Usage:
   raff [command]
 
 Available Commands:
+  api-key        Manage API keys
   completion     Generate the autocompletion script for the specified shell
   configure      Configure API credentials and defaults
   help           Help about any command
+  invitation     Send and cancel email invitations
   ip             Manage floating IPs
-  project        Manage projects
+  member         Manage account-level members
+  permission     List the permission catalog
+  project        Manage projects (incl. `raff project member`)
+  role           Manage IAM roles
   security-group Manage security groups
+  ssh-key        Manage SSH keys
+  version        Show the current version
   vm             Manage virtual machines
   vpc            Manage virtual private clouds
 
@@ -67,17 +74,17 @@ Replace `linux_x86_64` with `linux_arm64`, `macos_x86_64`, or `macos_arm64` as n
 
 #### Pinning to a specific version
 
-Replace `0.1.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
+Replace `0.2.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
 
 ```bash
 # Linux x86_64
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.1.0/raff_0.1.0_linux_x86_64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.2.0/raff_0.2.0_linux_x86_64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
 ```bash
 # macOS arm64 (Apple Silicon)
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.1.0/raff_0.1.0_macos_arm64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.2.0/raff_0.2.0_macos_arm64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
@@ -320,6 +327,39 @@ rm -rf ~/.raff
   raff security-group templates                          # list available template IDs
   raff security-group create --name web --template-id web-server
   raff vm sg attach <vm-id> --security-group-id <sg-id> --nic-id 0
+  ```
+
+- **Register an SSH key from a file (the typical bootstrap path):**
+  ```bash
+  raff ssh-key create --name laptop --public-key-file ~/.ssh/id_ed25519.pub
+  ```
+
+- **Create an API key for CI (secret printed once — copy it immediately):**
+  ```bash
+  raff api-key create --name "production-ci" --rate-limit-tier standard
+  ```
+
+- **Invite a teammate to a project:**
+  ```bash
+  raff role list --scope project                            # find the right role UUID
+  raff invitation create-project \
+    --project-id <project-uuid> \
+    --email teammate@example.com \
+    --role-id <project-role-uuid>
+  ```
+
+- **Add an existing account user to another project:**
+  ```bash
+  raff project member add <project-id> \
+    --target-user-id <user-uuid> \
+    --role-id <project-role-uuid>
+  ```
+
+- **Browse the permission catalog when designing a custom role:**
+  ```bash
+  raff permission list --scope project
+  raff role create --name "vm-operator" --slug vm-operator --scope project \
+    --permission vm.read --permission vm.start --permission vm.stop
   ```
 
 - **JSON output for scripting:**
