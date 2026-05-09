@@ -51,36 +51,43 @@ See the [full reference documentation](https://docs.rafftechnologies.com) for in
 
 ### Downloading a Release from GitHub
 
-Visit the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases) and find the appropriate archive for your operating system and architecture. Download the archive from your browser, or copy its URL and retrieve it with `wget` or `curl`.
+Visit the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases) for archives matching your OS / architecture. Builds are published for **linux**, **macos**, **windows** × **amd64**, **arm64**.
 
-For example, with `curl`:
-
-```bash
-cd ~
-curl -OL https://github.com/RaffTechnologies/raff-cli/releases/download/v<version>/raff_<version>_linux_x86_64.tar.gz
-```
-
-Extract the binary:
+#### Quickest — auto-detect the latest version
 
 ```bash
-tar xf ~/raff_<version>_linux_x86_64.tar.gz
+# Linux x86_64
+curl -sL "https://api.github.com/repos/RaffTechnologies/raff-cli/releases/latest" \
+  | grep "browser_download_url.*linux_x86_64.tar.gz" \
+  | cut -d'"' -f4 | xargs curl -sL | tar -xzv
+sudo mv raff /usr/local/bin/
 ```
 
-Or download and extract in one line:
+Replace `linux_x86_64` with `linux_arm64`, `macos_x86_64`, or `macos_arm64` as needed.
+
+#### Pinning to a specific version
+
+Replace `0.1.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
 
 ```bash
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v<version>/raff_<version>_linux_x86_64.tar.gz | tar -xzv
+# Linux x86_64
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.1.0/raff_0.1.0_linux_x86_64.tar.gz | tar -xzv
+sudo mv raff /usr/local/bin/
 ```
-
-Where `<version>` is the full semantic version, e.g. `0.1.0`. Builds are published for **linux**, **macos**, **windows** × **amd64**, **arm64**.
-
-Move the `raff` binary somewhere on your `PATH`. For example, on Linux/macOS:
 
 ```bash
-sudo mv ~/raff /usr/local/bin
+# macOS arm64 (Apple Silicon)
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.1.0/raff_0.1.0_macos_arm64.tar.gz | tar -xzv
+sudo mv raff /usr/local/bin/
 ```
 
-Windows users should follow [How to: Add Tool Locations to the PATH Environment Variable](https://learn.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14)) to add `raff` to their `PATH`.
+For Windows, download the matching `.zip` from the Releases page in your browser, extract `raff.exe`, then follow [How to: Add Tool Locations to the PATH Environment Variable](https://learn.microsoft.com/en-us/previous-versions/office/developer/sharepoint-2010/ee537574(v=office.14)) to put it on your `PATH`.
+
+Verify the install:
+
+```bash
+raff --version
+```
 
 ### Building the Development Version from Source
 
