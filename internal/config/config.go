@@ -21,9 +21,22 @@ type Config struct {
 	Profiles       map[string]Profile `yaml:"profiles"`
 }
 
+// ConfigDir returns the absolute directory raff stores config in.
+// Falls back to the current working directory when $HOME is unset (some
+// minimal Docker base images don't set it for the root user) so the
+// printed path is always absolute and copy-pasteable.
 func ConfigDir() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".raff")
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		if cwd, cwdErr := os.Getwd(); cwdErr == nil {
+			home = cwd
+		}
+	}
+	dir := filepath.Join(home, ".raff")
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
 }
 
 func ConfigPath() string {

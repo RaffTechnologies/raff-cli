@@ -23,9 +23,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
+      - -X github.com/rafftechnologies/raff-cli/internal/commands.Version={{.Version}}
+      - -X github.com/rafftechnologies/raff-cli/internal/commands.Commit={{.Commit}}
+      - -X github.com/rafftechnologies/raff-cli/internal/commands.Date={{.Date}}
 
 archives:
   - id: raff
