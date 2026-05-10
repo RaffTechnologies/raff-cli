@@ -16,7 +16,7 @@ import (
 // Build-time injected via -ldflags by Makefile and goreleaser.
 // Defaults are sane fallbacks for `go install` users (no ldflags).
 var (
-	Version = "0.3.0"
+	Version = "0.3.1"
 	Commit  = ""
 	Date    = ""
 )
@@ -140,4 +140,27 @@ func newClient() (*raff.Client, error) {
 
 func outputFormat() output.Format {
 	return output.ParseFormat(flagOutput)
+}
+
+// resolveProjectID returns the effective project ID from CLI flag,
+// RAFF_PROJECT_ID env var, or the active profile — same priority chain
+// as newClient. Used by commands that take project ID as a path
+// parameter (e.g. `project member`) rather than via the X-Project-ID
+// header. Returns "" when no project is configured.
+func resolveProjectID() string {
+	cfg, err := config.Load()
+	if err != nil {
+		return config.Resolve(flagProjectID, "RAFF_PROJECT_ID", "")
+	}
+	return config.Resolve(flagProjectID, "RAFF_PROJECT_ID", cfg.ActiveProfile().ProjectID)
+}
+
+// requireProjectID is resolveProjectID with a clear error when nothing
+// is configured.
+func requireProjectID() (string, error) {
+	pid := resolveProjectID()
+	if pid == "" {
+		return "", fmt.Errorf("no project ID configured. Pass --project-id, set RAFF_PROJECT_ID, or run `raff configure` to set a default")
+	}
+	return pid, nil
 }

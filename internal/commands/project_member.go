@@ -19,6 +19,11 @@ func newProjectMemberCmd() *cobra.Command {
 		Use:     "member",
 		Aliases: []string{"members"},
 		Short:   "Manage project members",
+		Long: `Manage members of a project.
+
+The project is taken from --project-id (global flag), RAFF_PROJECT_ID,
+or the active profile — same precedence as every other project-scoped
+command (vm list, volume list, etc.).`,
 	}
 	cmd.AddCommand(newProjectMemberListCmd())
 	cmd.AddCommand(newProjectMemberGetCmd())
@@ -31,10 +36,13 @@ func newProjectMemberCmd() *cobra.Command {
 func newProjectMemberListCmd() *cobra.Command {
 	var status string
 	cmd := &cobra.Command{
-		Use:   "list <project-id>",
-		Short: "List members of a project",
-		Args:  cobra.ExactArgs(1),
+		Use:   "list",
+		Short: "List members of the current project",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pid, err := requireProjectID()
+			if err != nil {
+				return err
+			}
 			c, err := newClient()
 			if err != nil {
 				return err
@@ -44,7 +52,7 @@ func newProjectMemberListCmd() *cobra.Command {
 				s := spec.ListProjectMembersParamsStatus(status)
 				opts = &raff.ProjectMemberListOptions{Status: &s}
 			}
-			members, _, err := c.ProjectMembers.List(context.Background(), args[0], opts)
+			members, _, err := c.ProjectMembers.List(context.Background(), pid, opts)
 			if err != nil {
 				return err
 			}
@@ -55,12 +63,11 @@ func newProjectMemberListCmd() *cobra.Command {
 			}
 			t := output.NewTable("ID", "EMAIL", "STATUS", "ROLE")
 			for _, m := range members {
-				email := string(m.Email)
 				role := ""
 				if m.RoleName != nil {
 					role = *m.RoleName
 				}
-				t.AddRow(m.ID.String(), email, string(m.Status), role)
+				t.AddRow(m.ID.String(), string(m.Email), string(m.Status), role)
 			}
 			t.Flush()
 			return nil
@@ -72,15 +79,19 @@ func newProjectMemberListCmd() *cobra.Command {
 
 func newProjectMemberGetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <project-id> <member-id>",
+		Use:   "get <member-id>",
 		Short: "Get a project member's details",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pid, err := requireProjectID()
+			if err != nil {
+				return err
+			}
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
-			m, _, err := c.ProjectMembers.Get(context.Background(), args[0], args[1])
+			m, _, err := c.ProjectMembers.Get(context.Background(), pid, args[0])
 			if err != nil {
 				return err
 			}
@@ -89,14 +100,13 @@ func newProjectMemberGetCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			email := string(m.Email)
 			role := ""
 			if m.RoleName != nil {
 				role = *m.RoleName
 			}
 			output.PrintDetail([][2]string{
 				{"ID", m.ID.String()},
-				{"Email", email},
+				{"Email", string(m.Email)},
 				{"Status", string(m.Status)},
 				{"Role", role},
 			})
@@ -108,10 +118,13 @@ func newProjectMemberGetCmd() *cobra.Command {
 func newProjectMemberAddCmd() *cobra.Command {
 	var roleID, targetUserID, apiKeyID string
 	cmd := &cobra.Command{
-		Use:   "add <project-id>",
-		Short: "Add an existing account user (or API key) to a project",
-		Args:  cobra.ExactArgs(1),
+		Use:   "add",
+		Short: "Add an existing account user (or API key) to the current project",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pid, err := requireProjectID()
+			if err != nil {
+				return err
+			}
 			c, err := newClient()
 			if err != nil {
 				return err
@@ -135,7 +148,7 @@ func newProjectMemberAddCmd() *cobra.Command {
 				}
 				req.APIKeyID = &kid
 			}
-			m, _, err := c.ProjectMembers.Add(context.Background(), args[0], req)
+			m, _, err := c.ProjectMembers.Add(context.Background(), pid, req)
 			if err != nil {
 				return err
 			}
@@ -158,10 +171,14 @@ func newProjectMemberAddCmd() *cobra.Command {
 func newProjectMemberUpdateCmd() *cobra.Command {
 	var roleID, status string
 	cmd := &cobra.Command{
-		Use:   "update <project-id> <member-id>",
+		Use:   "update <member-id>",
 		Short: "Update a project member's role or status",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pid, err := requireProjectID()
+			if err != nil {
+				return err
+			}
 			c, err := newClient()
 			if err != nil {
 				return err
@@ -184,7 +201,7 @@ func newProjectMemberUpdateCmd() *cobra.Command {
 			if !changed {
 				return fmt.Errorf("at least one of --role-id, --status required")
 			}
-			m, _, err := c.ProjectMembers.Update(context.Background(), args[0], args[1], req)
+			m, _, err := c.ProjectMembers.Update(context.Background(), pid, args[0], req)
 			if err != nil {
 				return err
 			}
@@ -205,12 +222,16 @@ func newProjectMemberUpdateCmd() *cobra.Command {
 func newProjectMemberRemoveCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
-		Use:   "remove <project-id> <member-id>",
-		Short: "Remove a member from a project",
-		Args:  cobra.ExactArgs(2),
+		Use:   "remove <member-id>",
+		Short: "Remove a member from the current project",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			pid, err := requireProjectID()
+			if err != nil {
+				return err
+			}
 			if !force {
-				fmt.Printf("Are you sure you want to remove member %s from project %s? [y/N]: ", args[1], args[0])
+				fmt.Printf("Are you sure you want to remove member %s from project %s? [y/N]: ", args[0], pid)
 				var answer string
 				fmt.Scanln(&answer)
 				if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
@@ -222,7 +243,7 @@ func newProjectMemberRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := c.ProjectMembers.Remove(context.Background(), args[0], args[1]); err != nil {
+			if _, err := c.ProjectMembers.Remove(context.Background(), pid, args[0]); err != nil {
 				return err
 			}
 			return printActionMessage("Project member removed.")
