@@ -861,7 +861,7 @@ func newVMNetworksCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("NIC", "TYPE", "NETWORK", "IP", "GATEWAY", "SECURITY GROUP")
+			t := output.NewTable("NIC", "TYPE", "NETWORK", "IP", "MAC", "GATEWAY", "SECURITY GROUP")
 			for _, n := range nets {
 				netName := n.NetworkName
 				if netName == "" {
@@ -874,6 +874,7 @@ func newVMNetworksCmd() *cobra.Command {
 					string(n.Type),
 					netName,
 					n.IP,
+					raff.StringValue(n.Mac),
 					raff.StringValue(n.Gateway),
 					sgIDString(n.SecurityGroupID),
 				)
