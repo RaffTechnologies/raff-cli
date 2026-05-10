@@ -157,6 +157,7 @@ func newVMCreateCmd() *cobra.Command {
 	var name, templateID, region, password, extraStorageType, backupType, backupTime, backupDate, vpcID, vpcName, vpcCIDR string
 	var pricingID, extraStorage int
 	var sshKeys, tags []string
+	var noVPC bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -164,10 +165,14 @@ func newVMCreateCmd() *cobra.Command {
 		Long: `Create a new virtual machine.
 
 Networking:
-  - If --vpc-id is given, the VM is attached to that existing VPC.
-  - If --vpc-name and --vpc-cidr are given, a new VPC is created with those values.
-  - If neither is given, a VPC is auto-created for the VM (named vpc-<vm-name>-<short hash>)
-    and torn down with the last VM that uses it.
+  - --vpc-id <uuid>             attach to that existing VPC
+  - --vpc-name <name> + --vpc-cidr <cidr>
+                                create a new VPC with those values
+  - --no-vpc                    skip VPC entirely; the VM has only a public IP
+  - (none of the above)         auto-create a VPC named vpc-<vm-name>-<short hash>;
+                                it tears down with the last VM that uses it
+
+--no-vpc cannot be combined with --skip-public-ip (the VM would have no network).
 
 Tip: pass --output json to capture the response programmatically (includes the
 auto-created vpc_id when applicable).`,
@@ -228,6 +233,12 @@ auto-created vpc_id when applicable).`,
 			if vpcCIDR != "" {
 				req.VpcCidr = raff.String(vpcCIDR)
 			}
+			if noVPC {
+				if vpcID != "" || vpcName != "" || vpcCIDR != "" {
+					return fmt.Errorf("--no-vpc cannot be combined with --vpc-id / --vpc-name / --vpc-cidr")
+				}
+				req.SkipVpc = raff.Bool(true)
+			}
 
 			vm, _, err := c.VMs.Create(context.Background(), req)
 			if err != nil {
@@ -258,9 +269,10 @@ auto-created vpc_id when applicable).`,
 	cmd.Flags().StringVar(&backupTime, "backup-time", "", "Backup time")
 	cmd.Flags().StringVar(&backupDate, "backup-date", "", "Backup date")
 	cmd.Flags().StringSliceVar(&tags, "tags", nil, "Tags")
-	cmd.Flags().StringVar(&vpcID, "vpc-id", "", "VPC ID")
-	cmd.Flags().StringVar(&vpcName, "vpc-name", "", "VPC name")
-	cmd.Flags().StringVar(&vpcCIDR, "vpc-cidr", "", "VPC CIDR")
+	cmd.Flags().StringVar(&vpcID, "vpc-id", "", "Attach to this existing VPC (UUID)")
+	cmd.Flags().StringVar(&vpcName, "vpc-name", "", "Create a new VPC with this name (requires --vpc-cidr)")
+	cmd.Flags().StringVar(&vpcCIDR, "vpc-cidr", "", "CIDR for the new VPC (e.g. 10.0.0.0/24)")
+	cmd.Flags().BoolVar(&noVPC, "no-vpc", false, "Create the VM with only a public IP — no VPC at all")
 
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("template-id")
