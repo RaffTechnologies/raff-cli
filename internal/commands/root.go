@@ -16,7 +16,7 @@ import (
 // Build-time injected via -ldflags by Makefile and goreleaser.
 // Defaults are sane fallbacks for `go install` users (no ldflags).
 var (
-	Version = "0.3.1"
+	Version = "0.3.2"
 	Commit  = ""
 	Date    = ""
 )

@@ -18,7 +18,15 @@ func newBackupCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "backup",
 		Aliases: []string{"backups"},
-		Short:   "Manage VM backups",
+		Short:   "Manage VM backup snapshots and recurring backup schedules",
+		Long: `Take, restore, and delete managed backups of VMs, and configure recurring
+backup schedules.
+
+Backups are full point-in-time copies of a VM's disk, stored separately
+from the VM. Restoring overwrites the source VM's current disk state.
+
+Note: this is the resource management surface. For the per-GB pricing of
+backup storage, see "raff pricing backup".`,
 	}
 	cmd.AddCommand(newBackupListCmd())
 	cmd.AddCommand(newBackupGetCmd())
@@ -30,7 +38,8 @@ func newBackupCmd() *cobra.Command {
 }
 
 func newBackupListCmd() *cobra.Command {
-	return &cobra.Command{
+	var vmID, status string
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List backups",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -38,9 +47,29 @@ func newBackupListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			items, _, err := c.Backups.List(context.Background(), nil)
+			opts := &raff.BackupListOptions{}
+			if vmID != "" {
+				vid := openapi_types.UUID{}
+				if err := vid.UnmarshalText([]byte(vmID)); err != nil {
+					return fmt.Errorf("invalid --vm-id: %w", err)
+				}
+				opts.VMID = &vid
+			}
+			items, _, err := c.Backups.List(context.Background(), opts)
 			if err != nil {
 				return err
+			}
+			// Client-side --status filter (the spec doesn't expose it on
+			// ListBackups; matches the user-friendly filtering on snapshot
+			// list which has a server-side type filter).
+			if status != "" {
+				filtered := items[:0]
+				for _, b := range items {
+					if b.Status == status {
+						filtered = append(filtered, b)
+					}
+				}
+				items = filtered
 			}
 			if outputFormat() == output.FormatJSON {
 				data, _ := json.Marshal(items)
@@ -70,6 +99,9 @@ func newBackupListCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&vmID, "vm-id", "", "Filter by source VM UUID")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status (pending, creating, ready, restoring, failed) — applied client-side")
+	return cmd
 }
 
 func newBackupGetCmd() *cobra.Command {

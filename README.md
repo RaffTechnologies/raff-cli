@@ -294,12 +294,12 @@ rm -rf ~/.raff
   raff vm list
   ```
 
-- **Create a VM:**
+- **Create a VM** (`--pricing-id 9` is the standard 2 vCPU / 4 GB / 50 GB plan at $4.99/mo — see `raff pricing vm`):
   ```bash
   raff vm create \
     --name web-01 \
     --template-id 5ac21891-32e6-41ce-8a93-b5d6ab708b0d \
-    --pricing-id 3 \
+    --pricing-id 9 \
     --region us-east \
     --ssh-keys "ssh-ed25519 AAAA..."
   ```

@@ -67,7 +67,7 @@ func newSnapshotListCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "NAME", "SIZE", "TYPE", "STATUS", "CREATED")
+			t := output.NewTable("ID", "NAME", "SIZE", "TYPE", "SOURCE", "STATUS", "CREATED")
 			for _, s := range snaps {
 				size := ""
 				if s.Size != nil {
@@ -81,11 +81,22 @@ func newSnapshotListCmd() *cobra.Command {
 				if s.Status != nil {
 					status = string(*s.Status)
 				}
+				// SOURCE: the VM UUID for vm-typed snapshots. Volume-typed
+				// snapshots don't carry a source volume ID on the Snapshot
+				// struct itself (spec gap); shown as "(volume)" so the row
+				// at least disambiguates from vm snapshots.
+				source := ""
+				if s.ProductVM != nil {
+					source = s.ProductVM.String()
+				} else if string(s.Type) == "volume" {
+					source = "(volume)"
+				}
 				t.AddRow(
 					fmt.Sprintf("%d", s.ID),
 					s.Name,
 					size,
 					string(s.Type),
+					source,
 					status,
 					created,
 				)
