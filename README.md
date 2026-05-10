@@ -80,17 +80,17 @@ Replace `linux_x86_64` with `linux_arm64`, `macos_x86_64`, or `macos_arm64` as n
 
 #### Pinning to a specific version
 
-Replace `0.3.0` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
+Replace `0.3.4` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
 
 ```bash
 # Linux x86_64
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.0/raff_0.3.0_linux_x86_64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.4/raff_0.3.4_linux_x86_64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
 ```bash
 # macOS arm64 (Apple Silicon)
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.0/raff_0.3.0_macos_arm64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.4/raff_0.3.4_macos_arm64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
@@ -372,7 +372,7 @@ rm -rf ~/.raff
   ```bash
   raff volume create \
     --name data-vol \
-    --size 100 --type standard --region us-east \
+    --size 100 --type nvme --region us-east \
     --vm-id <vm-uuid>
   ```
 
