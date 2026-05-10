@@ -394,7 +394,9 @@ rm -rf ~/.raff
 - **Browse VM pricing, find the cheapest plan in a region:**
   ```bash
   raff pricing vm --region us-east --output json | jq 'min_by(.monthly_price)'
-  raff template list --category linux --vm-type standard
+  raff template list --vm-type standard          # all OS templates compatible with the standard VM tier
+  raff template list --category marketplace       # pre-baked app images (LAMP, WordPress, …)
+  raff template list -o json | jq '.[] | select(.os_type=="linux")'   # filter by OS family (response-side)
   raff region list
   ```
 
