@@ -45,6 +45,8 @@ Use "raff [command] --help" for more information about a command.
 
 See the [full reference documentation](https://docs.rafftechnologies.com) for information about each available command.
 
+> **What's new in v0.3.6** — `MAC` column on `raff vm networks`, `raff vm create --no-vpc`, base disk vs attached volumes split on `raff vm get`, "Attached VMs" relabel on security groups, `--type` help enumerates `nvme`, plus the API-side fixes that make `raff volume create` work without a `--pricing-id` flag (auto-derived from `--type` + `--region`) and `--filesystem ext4` actually honored. Full details in the [API changelog](https://docs.rafftechnologies.com/api-reference/changelog).
+
 - [Installing `raff`](#installing-raff)
   - [Downloading a Release from GitHub](#downloading-a-release-from-github)
   - [Building the Development Version from Source](#building-the-development-version-from-source)
@@ -80,17 +82,17 @@ Replace `linux_x86_64` with `linux_arm64`, `macos_x86_64`, or `macos_arm64` as n
 
 #### Pinning to a specific version
 
-Replace `0.3.4` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
+Replace `0.3.6` below with the version you want from the [Releases page](https://github.com/RaffTechnologies/raff-cli/releases).
 
 ```bash
 # Linux x86_64
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.4/raff_0.3.4_linux_x86_64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.6/raff_0.3.6_linux_x86_64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
 ```bash
 # macOS arm64 (Apple Silicon)
-curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.4/raff_0.3.4_macos_arm64.tar.gz | tar -xzv
+curl -sL https://github.com/RaffTechnologies/raff-cli/releases/download/v0.3.6/raff_0.3.6_macos_arm64.tar.gz | tar -xzv
 sudo mv raff /usr/local/bin/
 ```
 
