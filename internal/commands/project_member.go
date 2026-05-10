@@ -70,6 +70,9 @@ func newProjectMemberListCmd() *cobra.Command {
 				t.AddRow(m.ID.String(), string(m.Email), string(m.Status), role)
 			}
 			t.Flush()
+			if len(members) == 0 {
+				fmt.Println("No project members. (Account Owners and Admins have implicit access via account-level roles.)")
+			}
 			return nil
 		},
 	}
