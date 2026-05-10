@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	raff "github.com/rafftechnologies/raff-go"
 	"github.com/rafftechnologies/raff-go/spec"
@@ -195,7 +196,12 @@ func printStoragePricing(p *raff.StoragePricing, label string) error {
 	if p.Region != nil {
 		region = string(*p.Region)
 	}
+	id := ""
+	if p.ID != nil {
+		id = strconv.Itoa(*p.ID)
+	}
 	output.PrintDetail([][2]string{
+		{"ID", id},
 		{"Type", label},
 		{"Region", region},
 		{"Per GB / hour", floatVal(p.PricePerGbHour)},
