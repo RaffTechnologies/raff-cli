@@ -181,7 +181,7 @@ func newVolumeCreateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Volume name (required)")
 	cmd.Flags().IntVar(&size, "size", 0, "Size in GB (required)")
-	cmd.Flags().StringVar(&volumeType, "type", "", "Storage class (required, e.g. standard)")
+	cmd.Flags().StringVar(&volumeType, "type", "", "Storage class (required). One of: nvme")
 	cmd.Flags().StringVar(&region, "region", "", "Region (defaults to project's default)")
 	cmd.Flags().StringVar(&filesystem, "filesystem", "", "Filesystem type for first attach (e.g. ext4, xfs)")
 	cmd.Flags().StringVar(&vmID, "vm-id", "", "Attach to this VM at create time (must be in same region)")
