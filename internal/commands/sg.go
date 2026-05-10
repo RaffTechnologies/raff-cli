@@ -47,7 +47,7 @@ func newSGListCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "NAME", "RULES", "VMS", "DESCRIPTION")
+			t := output.NewTable("ID", "NAME", "RULES", "ATTACHED VMS", "DESCRIPTION")
 			for _, sg := range sgs {
 				rules := 0
 				if sg.Rules != nil {
@@ -129,12 +129,12 @@ func newSGGetCmd() *cobra.Command {
 				{"ID", sg.ID.String()},
 				{"Name", sg.Name},
 				{"Description", raff.StringValue(sg.Description)},
-				{"Attached NICs", fmt.Sprintf("%d", intValue(sg.VMCount))},
+				{"Attached VMs", fmt.Sprintf("%d", intValue(sg.VMCount))},
 			}
 			output.PrintDetail(pairs)
 			fmt.Println()
 			fmt.Println("Rules:")
-			rt := output.NewTable("DIRECTION", "PROTOCOL", "RANGE", "IP", "SIZE")
+			rt := output.NewTable("DIRECTION", "PROTOCOL", "RANGE", "IP")
 			if sg.Rules != nil {
 				for _, r := range sg.Rules {
 					rt.AddRow(
@@ -142,7 +142,6 @@ func newSGGetCmd() *cobra.Command {
 						string(r.Protocol),
 						raff.StringValue(r.Range),
 						raff.StringValue(r.IP),
-						fmt.Sprintf("%d", intValue(r.Size)),
 					)
 				}
 			}

@@ -161,6 +161,16 @@ func newVMCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new virtual machine",
+		Long: `Create a new virtual machine.
+
+Networking:
+  - If --vpc-id is given, the VM is attached to that existing VPC.
+  - If --vpc-name and --vpc-cidr are given, a new VPC is created with those values.
+  - If neither is given, a VPC is auto-created for the VM (named vpc-<vm-name>-<short hash>)
+    and torn down with the last VM that uses it.
+
+Tip: pass --output json to capture the response programmatically (includes the
+auto-created vpc_id when applicable).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
 			if err != nil {
@@ -704,17 +714,24 @@ func printVMDetail(vm *raff.VM) {
 		{"Status", string(vm.Status)},
 		{"CPU", fmt.Sprintf("%d", vm.CPU)},
 		{"RAM", fmt.Sprintf("%d GB", vm.RAM)},
-		{"Storage", fmt.Sprintf("%d GB", vm.TotalStorage)},
-		{"Template", vm.TemplateName + " " + vm.TemplateVersion},
-		{"Region", string(vm.Region)},
-		{"IPv4", raff.StringValue(vm.PublicIpv4Address)},
-		{"Private IPv4", raff.StringValue(vm.PrivateIpv4Address)},
-		{"Price/Hour", vm.PricePerHour},
-		{"Pricing ID", fmt.Sprintf("%d", vm.PricingID)},
-		{"Billing Type", billingTypeString(vm.BillingType)},
-		{"Active", fmt.Sprintf("%v", vm.Active)},
-		{"Created", vm.CreatedAt.Format("2006-01-02")},
+		{"Base disk", fmt.Sprintf("%d GB", vm.Storage)},
 	}
+	// Show attached-volume size only when one or more volumes are attached.
+	// Run `raff volume list --vm-id <id>` to see the individual volumes.
+	if attached := vm.TotalStorage - vm.Storage; attached > 0 {
+		pairs = append(pairs, [2]string{"Attached volumes", fmt.Sprintf("%d GB (run `raff volume list --vm-id %s` to see them)", attached, vm.ID.String())})
+	}
+	pairs = append(pairs,
+		[2]string{"Template", vm.TemplateName + " " + vm.TemplateVersion},
+		[2]string{"Region", string(vm.Region)},
+		[2]string{"IPv4", raff.StringValue(vm.PublicIpv4Address)},
+		[2]string{"Private IPv4", raff.StringValue(vm.PrivateIpv4Address)},
+		[2]string{"Price/Hour", vm.PricePerHour},
+		[2]string{"Pricing ID", fmt.Sprintf("%d", vm.PricingID)},
+		[2]string{"Billing Type", billingTypeString(vm.BillingType)},
+		[2]string{"Active", fmt.Sprintf("%v", vm.Active)},
+		[2]string{"Created", vm.CreatedAt.Format("2006-01-02")},
+	)
 	output.PrintDetail(pairs)
 }
 
@@ -834,10 +851,16 @@ func newVMNetworksCmd() *cobra.Command {
 			}
 			t := output.NewTable("NIC", "TYPE", "NETWORK", "IP", "GATEWAY", "SECURITY GROUP")
 			for _, n := range nets {
+				netName := n.NetworkName
+				if netName == "" {
+					// Public-pool NICs don't belong to a customer-owned network;
+					// surface that explicitly instead of leaving the cell blank.
+					netName = "(public pool)"
+				}
 				t.AddRow(
 					strconv.Itoa(n.NicID),
 					string(n.Type),
-					n.NetworkName,
+					netName,
 					n.IP,
 					raff.StringValue(n.Gateway),
 					sgIDString(n.SecurityGroupID),
