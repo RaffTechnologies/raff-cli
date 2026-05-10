@@ -71,7 +71,7 @@ func newProjectMemberListCmd() *cobra.Command {
 			}
 			t.Flush()
 			if len(members) == 0 {
-				fmt.Println("No project members. (Account Owners and Admins have implicit access via account-level roles.)")
+				fmt.Println("No project members. (Account Owners have implicit access via the account-level Owner role.)")
 			}
 			return nil
 		},
