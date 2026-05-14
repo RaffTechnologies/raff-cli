@@ -22,8 +22,16 @@ func newBackupCmd() *cobra.Command {
 		Long: `Take, restore, and delete managed backups of VMs, and configure recurring
 backup schedules.
 
-Backups are full point-in-time copies of a VM's disk, stored separately
-from the VM. Restoring overwrites the source VM's current disk state.
+Backups run as incremental series: the first one is a full baseline and
+later backups in the same series store only changed blocks. Each backup is
+a separate restore point — pick any to restore. Restoring overwrites the
+source VM's current disk state.
+
+Some operations span the whole series: "delete-series" removes every
+restore point in one call (needed when a single restore point can't be
+removed on its own because newer points depend on it). "reset-series"
+starts a fresh baseline on the next backup, leaving existing restore
+points alone.
 
 Note: this is the resource management surface. For the per-GB pricing of
 backup storage, see "raff pricing backup".`,
@@ -33,6 +41,8 @@ backup storage, see "raff pricing backup".`,
 	cmd.AddCommand(newBackupCreateCmd())
 	cmd.AddCommand(newBackupRestoreCmd())
 	cmd.AddCommand(newBackupDeleteCmd())
+	cmd.AddCommand(newBackupDeleteSeriesCmd())
+	cmd.AddCommand(newBackupResetSeriesCmd())
 	cmd.AddCommand(newBackupScheduleCmd())
 	return cmd
 }
@@ -223,7 +233,12 @@ func newBackupDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <backup-id>",
 		Short: "Delete a backup",
-		Args:  cobra.ExactArgs(1),
+		Long: `Delete a single backup (restore point).
+
+If the backup is part of an incremental series and has older restore
+points it depends on, the API rejects the delete and you must remove
+the whole series with "raff backup delete-series" instead.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !force {
 				fmt.Printf("Delete backup %s? [y/N]: ", args[0])
@@ -239,9 +254,88 @@ func newBackupDeleteCmd() *cobra.Command {
 				return err
 			}
 			if _, err := c.Backups.Delete(context.Background(), args[0]); err != nil {
+				// The API returns a structured message when the backup is
+				// mid-series; point the user at the right command instead
+				// of leaving them to parse the raw error.
+				if strings.Contains(err.Error(), "part of a chain") || strings.Contains(err.Error(), "series") {
+					return fmt.Errorf("%w\n\nThis backup is part of an incremental series. Remove the whole series with:\n  raff backup delete-series %s", err, args[0])
+				}
 				return err
 			}
 			return printActionMessage("Backup deleted.")
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func newBackupDeleteSeriesCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "delete-series <backup-id>",
+		Short: "Delete an entire incremental backup series",
+		Long: `Delete every restore point in the incremental series the given backup
+belongs to. The backup is identified by any UUID in the series — the API
+resolves it to the underlying storage and removes the whole chain in one
+call.
+
+Use this when "raff backup delete" reports that older restore points
+depend on the one you tried to delete.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				fmt.Printf("Delete entire backup series containing %s? Every restore point in the series is removed. [y/N]: ", args[0])
+				var answer string
+				fmt.Scanln(&answer)
+				if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+					fmt.Println("Aborted.")
+					return nil
+				}
+			}
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			if _, err := c.Backups.DeleteSeries(context.Background(), args[0]); err != nil {
+				return err
+			}
+			return printActionMessage("Backup series deleted.")
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func newBackupResetSeriesCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "reset-series <vm-id>",
+		Short: "Start a fresh backup series for a VM",
+		Long: `Close the VM's current incremental backup series so the next backup
+creates a new independent baseline. Existing restore points stay
+restorable until you delete them.
+
+Useful when a series has grown long and you want a clean starting point
+for future backups without losing what you already have.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				fmt.Printf("Start a fresh backup series for VM %s? Existing restore points remain. [y/N]: ", args[0])
+				var answer string
+				fmt.Scanln(&answer)
+				if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+					fmt.Println("Aborted.")
+					return nil
+				}
+			}
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			if _, err := c.Backups.ResetSeries(context.Background(), args[0]); err != nil {
+				return err
+			}
+			return printActionMessage("Fresh backup series queued — the next backup will start a new baseline.")
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
