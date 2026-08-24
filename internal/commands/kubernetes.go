@@ -28,6 +28,7 @@ func newKubernetesCmd() *cobra.Command {
 	cmd.AddCommand(newK8sKubeconfigCmd())
 	cmd.AddCommand(newK8sNodesCmd())
 	cmd.AddCommand(newK8sPoolCmd())
+	cmd.AddCommand(newK8sUpgradeHACmd())
 	cmd.AddCommand(newK8sVersionsCmd())
 	cmd.AddCommand(newK8sPlansCmd())
 	return cmd
@@ -492,6 +493,36 @@ func newK8sPoolDeleteCmd() *cobra.Command {
 				return err
 			}
 			return printActionMessage("Node pool deletion started.")
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
+	return cmd
+}
+
+func newK8sUpgradeHACmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "upgrade-ha <cluster-id>",
+		Short: "Upgrade to an HA control plane (3 masters + redundant gateway; cannot be reversed)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !force {
+				fmt.Printf("Upgrade cluster %s to HA? This adds the flat monthly HA fee and cannot be reversed. [y/N]: ", args[0])
+				var answer string
+				fmt.Scanln(&answer)
+				if !strings.EqualFold(answer, "y") && !strings.EqualFold(answer, "yes") {
+					fmt.Println("Aborted.")
+					return nil
+				}
+			}
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			if _, err := c.Kubernetes.UpgradeHA(context.Background(), args[0]); err != nil {
+				return err
+			}
+			return printActionMessage("HA upgrade started — the new masters and gateway join over a few minutes.")
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
