@@ -97,6 +97,12 @@ func init() {
 	rootCmd.AddCommand(newRegionCmd())
 	rootCmd.AddCommand(newTemplateCmd())
 	rootCmd.AddCommand(newPricingCmd())
+	rootCmd.AddCommand(newFunctionsCmd())
+	rootCmd.AddCommand(newAppsCmd())
+	rootCmd.AddCommand(newDeployCmd())
+	rootCmd.AddCommand(newDevCmd())
+	rootCmd.AddCommand(newImportCmd())
+	rootCmd.AddCommand(newKubernetesCmd())
 }
 
 func Execute() error {
@@ -109,6 +115,12 @@ func Execute() error {
 
 // newClient builds a raff-go API client from resolved config values.
 func newClient() (*raff.Client, error) {
+	return newClientWithTimeout(30 * time.Second)
+}
+
+// newClientWithTimeout is newClient with a custom HTTP timeout — used by
+// `raff deploy` (source zip uploads can outlive the default 30s).
+func newClientWithTimeout(timeout time.Duration) (*raff.Client, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -135,7 +147,7 @@ func newClient() (*raff.Client, error) {
 		opts = append(opts, raff.SetProjectID(projectID))
 	}
 
-	return raff.New(&http.Client{Timeout: 30 * time.Second}, apiKey, opts...), nil
+	return raff.New(&http.Client{Timeout: timeout}, apiKey, opts...), nil
 }
 
 func outputFormat() output.Format {
