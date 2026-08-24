@@ -29,6 +29,8 @@ func newKubernetesCmd() *cobra.Command {
 	cmd.AddCommand(newK8sNodesCmd())
 	cmd.AddCommand(newK8sPoolCmd())
 	cmd.AddCommand(newK8sUpgradeHACmd())
+	cmd.AddCommand(newK8sUpgradeCmd())
+	cmd.AddCommand(newK8sMaintenanceCmd())
 	cmd.AddCommand(newK8sVersionsCmd())
 	cmd.AddCommand(newK8sPlansCmd())
 	return cmd
@@ -602,4 +604,92 @@ func newK8sPlansCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newK8sUpgradeCmd() *cobra.Command {
+	var versionID int
+	var confirmSingleMaster bool
+	cmd := &cobra.Command{
+		Use:   "upgrade <cluster-id>",
+		Short: "Upgrade the cluster's Kubernetes version (rolling, in place)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			if versionID == 0 {
+				info, _, err := c.Kubernetes.Upgrades(context.Background(), args[0])
+				if err != nil {
+					return err
+				}
+				if outputFormat() == output.FormatJSON {
+					data, _ := json.Marshal(info)
+					output.PrintJSON(data)
+					return nil
+				}
+				fmt.Printf("Current version: %s (upgrade %s, mode %s)\n", info.CurrentVersion, info.UpgradeStatus, info.UpgradeMode)
+				if len(info.Available) == 0 {
+					fmt.Println("No upgrades available — the cluster is on the newest supported version.")
+					return nil
+				}
+				t := output.NewTable("VERSION ID", "VERSION", "RKE2", "TYPE", "DEFAULT")
+				for _, a := range info.Available {
+					kind := "patch"
+					if a.IsMinor {
+						kind = "minor"
+					}
+					def := ""
+					if a.IsDefault {
+						def = "yes"
+					}
+					t.AddRow(strconv.Itoa(a.VersionID), a.Version, a.RKE2Version, kind, def)
+				}
+				t.Flush()
+				fmt.Println("\nRun again with --version <version-id> to start the upgrade.")
+				return nil
+			}
+			if _, err := c.Kubernetes.Upgrade(context.Background(), args[0], versionID, confirmSingleMaster); err != nil {
+				return err
+			}
+			return printActionMessage("Kubernetes upgrade started — progress appears in the cluster events.")
+		},
+	}
+	cmd.Flags().IntVar(&versionID, "version", 0, "Target version ID (omit to list available upgrades)")
+	cmd.Flags().BoolVar(&confirmSingleMaster, "confirm-single-master", false, "Accept the brief API interruption on non-HA clusters")
+	return cmd
+}
+
+func newK8sMaintenanceCmd() *cobra.Command {
+	var mode string
+	var day, start int
+	cmd := &cobra.Command{
+		Use:   "maintenance <cluster-id>",
+		Short: "Set the upgrade mode and weekly 4-hour maintenance window",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mode == "" {
+				return fmt.Errorf("--mode is required (manual, auto_patch or auto_minor)")
+			}
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			var dayPtr, startPtr *int
+			if cmd.Flags().Changed("day") {
+				dayPtr = &day
+			}
+			if cmd.Flags().Changed("start") {
+				startPtr = &start
+			}
+			if _, err := c.Kubernetes.SetMaintenance(context.Background(), args[0], mode, dayPtr, startPtr); err != nil {
+				return err
+			}
+			return printActionMessage("Maintenance settings updated.")
+		},
+	}
+	cmd.Flags().StringVar(&mode, "mode", "", "Upgrade mode: manual, auto_patch or auto_minor")
+	cmd.Flags().IntVar(&day, "day", 0, "Maintenance day: 0 (Sunday) to 6 (Saturday)")
+	cmd.Flags().IntVar(&start, "start", 0, "Window start hour (UTC); window is 4 hours")
+	return cmd
 }
