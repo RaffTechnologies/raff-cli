@@ -54,8 +54,12 @@ func newPricingVMCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "TYPE", "REGION", "vCPU", "RAM", "SSD", "TRANSFER", "$/HR", "$/MO")
+			t := output.NewTable("ID", "TYPE", "REGION", "vCPU", "RAM", "SSD", "TRANSFER", "$/HR", "$/MO", "STOCK")
 			for _, p := range plans {
+				stock := "In Stock"
+				if p.OutOfStock != nil && *p.OutOfStock {
+					stock = "Sold Out"
+				}
 				t.AddRow(
 					fmt.Sprintf("%d", p.ID),
 					string(p.VMType),
@@ -66,6 +70,7 @@ func newPricingVMCmd() *cobra.Command {
 					fmt.Sprintf("%d GiB", p.TransferGib),
 					fmt.Sprintf("%.4f", p.PricePerHour),
 					fmt.Sprintf("%.2f", p.MonthlyPrice),
+					stock,
 				)
 			}
 			t.Flush()
