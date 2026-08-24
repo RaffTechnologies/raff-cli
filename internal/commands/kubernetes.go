@@ -160,7 +160,7 @@ func newK8sCreateCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "Create a Kubernetes cluster (pay-as-you-go accounts)",
+		Short: "Create a Kubernetes cluster",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if name == "" {
 				return fmt.Errorf("--name is required")
