@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	raff "github.com/rafftechnologies/raff-go"
 
@@ -244,7 +245,7 @@ func newK8sDeleteCmd() *cobra.Command {
 					return err
 				}
 			}
-			return printActionMessage("Cluster deletion completed." )
+			return printActionMessage("Cluster deletion completed.")
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
@@ -271,17 +272,26 @@ func newK8sRenameCmd() *cobra.Command {
 }
 
 func newK8sKubeconfigCmd() *cobra.Command {
-	var save string
+	var save, ttl string
 	cmd := &cobra.Command{
 		Use:   "kubeconfig <cluster-id>",
-		Short: "Print the cluster's kubeconfig (or save it with --save)",
+		Short: "Print the cluster's kubeconfig (admin, or short-lived with --ttl; rotate with 'kubeconfig rotate')",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
-			kc, _, err := c.Kubernetes.Kubeconfig(context.Background(), args[0])
+			var kc *raff.K8sKubeconfig
+			if ttl != "" {
+				d, perr := time.ParseDuration(ttl)
+				if perr != nil {
+					return fmt.Errorf("invalid --ttl %q (use e.g. 1h, 30m, 24h): %w", ttl, perr)
+				}
+				kc, _, err = c.Kubernetes.KubeconfigWithTTL(context.Background(), args[0], int(d.Seconds()))
+			} else {
+				kc, _, err = c.Kubernetes.Kubeconfig(context.Background(), args[0])
+			}
 			if err != nil {
 				return err
 			}
@@ -296,7 +306,27 @@ func newK8sKubeconfigCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&save, "save", "", "Write the kubeconfig to this file (mode 0600) instead of stdout")
+	cmd.Flags().StringVar(&ttl, "ttl", "", "Issue a SHORT-LIVED kubeconfig with this lifetime (10m–720h), e.g. --ttl 1h")
+	cmd.AddCommand(newK8sKubeconfigRotateCmd())
 	return cmd
+}
+
+func newK8sKubeconfigRotateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rotate <cluster-id>",
+		Short: "Invalidate every previously issued short-lived kubeconfig, immediately",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			if _, err := c.Kubernetes.RotateKubeconfigAccess(context.Background(), args[0]); err != nil {
+				return err
+			}
+			return printActionMessage("Cluster access rotated — all previously issued short-lived kubeconfigs are now invalid.")
+		},
+	}
 }
 
 func newK8sNodesCmd() *cobra.Command {
