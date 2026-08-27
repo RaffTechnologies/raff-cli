@@ -34,6 +34,7 @@ func newKubernetesCmd() *cobra.Command {
 	cmd.AddCommand(newK8sMaintenanceCmd())
 	cmd.AddCommand(newK8sVersionsCmd())
 	cmd.AddCommand(newK8sPlansCmd())
+	cmd.AddCommand(newK8sVolumesCmd())
 	return cmd
 }
 
@@ -475,7 +476,7 @@ func newK8sPoolAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&name, "name", "", "Pool name")
 	cmd.Flags().IntVar(&planID, "plan", 0, "Worker node plan ID")
-	cmd.Flags().IntVar(&nodes, "nodes", 2, "Node count (2–20)")
+	cmd.Flags().IntVar(&nodes, "nodes", 2, "Node count (1–20; pools may use different plans)")
 	return cmd
 }
 
@@ -619,15 +620,56 @@ func newK8sPlansCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "NAME", "VCPU", "MEMORY", "SSD", "PRICE/MO")
+			t := output.NewTable("ID", "NAME", "CLASS", "VCPU", "MEMORY", "SSD", "PRICE/MO")
 			for _, p := range plans.Plans {
+				class := "shared"
+				if p.NodeClass != nil {
+					class = string(*p.NodeClass)
+				}
 				t.AddRow(
 					strconv.Itoa(p.ID),
 					p.Name,
+					class,
 					strconv.Itoa(p.Vcpu),
 					fmt.Sprintf("%d GiB", p.MemoryGib),
 					fmt.Sprintf("%d GiB", p.SsdGib),
 					fmt.Sprintf("$%.2f", p.PricePerMonth),
+				)
+			}
+			t.Flush()
+			return nil
+		},
+	}
+}
+
+func newK8sVolumesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "volumes <cluster-id>",
+		Short: "List the cluster's PVC-provisioned volumes (raff-block StorageClass)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			volumes, _, err := c.Kubernetes.ListClusterVolumes(context.Background(), args[0])
+			if err != nil {
+				return err
+			}
+			if outputFormat() == output.FormatJSON {
+				data, _ := json.Marshal(volumes)
+				output.PrintJSON(data)
+				return nil
+			}
+			t := output.NewTable("PV NAME", "NAME", "SIZE", "STATUS", "NODE IP", "PRICE/HR")
+			for _, v := range volumes {
+				t.AddRow(
+					v.PVName,
+					v.Name,
+					fmt.Sprintf("%d GiB", v.SizeGB),
+					v.Status,
+					v.NodeIP,
+					fmt.Sprintf("$%.6f", v.PricePerHour),
 				)
 			}
 			t.Flush()
