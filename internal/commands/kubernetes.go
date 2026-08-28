@@ -35,6 +35,7 @@ func newKubernetesCmd() *cobra.Command {
 	cmd.AddCommand(newK8sVersionsCmd())
 	cmd.AddCommand(newK8sPlansCmd())
 	cmd.AddCommand(newK8sVolumesCmd())
+	cmd.AddCommand(newK8sTokenCmd())
 	return cmd
 }
 
@@ -274,25 +275,67 @@ func newK8sRenameCmd() *cobra.Command {
 
 func newK8sKubeconfigCmd() *cobra.Command {
 	var save, ttl string
+	var static bool
 	cmd := &cobra.Command{
 		Use:   "kubeconfig <cluster-id>",
-		Short: "Print the cluster's kubeconfig (admin, or short-lived with --ttl; rotate with 'kubeconfig rotate')",
-		Args:  cobra.ExactArgs(1),
+		Short: "Write a self-renewing kubeconfig (or a static short-lived one with --static)",
+		Long: `Write a kubeconfig for the cluster.
+
+By default the kubeconfig contains no credential at all: it calls this CLI for
+a fresh, short-lived token before each kubectl command (the same client-go
+exec-credential mechanism GKE, EKS and doctl use). Nothing long-lived is ever
+written to disk, and the file is useless to anyone without your API key.
+
+--static writes a token in the file instead, for environments that cannot run
+the CLI. It expires (7 days by default, --ttl to change) and cannot be renewed
+without downloading a new one.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
-			var kc *raff.K8sKubeconfig
+			clusterID := args[0]
+
+			// Default: an exec-credential kubeconfig. We still fetch a
+			// kubeconfig once to learn the API endpoint and CA data — the
+			// credential it carries is discarded and never written.
+			if !static {
+				seconds := 3600
+				if ttl != "" {
+					d, perr := time.ParseDuration(ttl)
+					if perr != nil {
+						return fmt.Errorf("invalid --ttl %q (use e.g. 1h, 30m, 24h): %w", ttl, perr)
+					}
+					seconds = int(d.Seconds())
+				}
+				kc, _, err := c.Kubernetes.KubeconfigWithTTL(context.Background(), clusterID, seconds)
+				if err != nil {
+					return err
+				}
+				out, err := execKubeconfig(kc.Kubeconfig, clusterID)
+				if err != nil {
+					return err
+				}
+				if save != "" {
+					if err := os.WriteFile(save, []byte(out), 0o600); err != nil {
+						return fmt.Errorf("failed to write %s: %w", save, err)
+					}
+					return printActionMessage(fmt.Sprintf("Kubeconfig saved to %s (endpoint %s) — tokens are renewed automatically, nothing long-lived is stored.", save, kc.APIEndpoint))
+				}
+				fmt.Print(out)
+				return nil
+			}
+
+			seconds := 7 * 24 * 3600
 			if ttl != "" {
 				d, perr := time.ParseDuration(ttl)
 				if perr != nil {
 					return fmt.Errorf("invalid --ttl %q (use e.g. 1h, 30m, 24h): %w", ttl, perr)
 				}
-				kc, _, err = c.Kubernetes.KubeconfigWithTTL(context.Background(), args[0], int(d.Seconds()))
-			} else {
-				kc, _, err = c.Kubernetes.Kubeconfig(context.Background(), args[0])
+				seconds = int(d.Seconds())
 			}
+			kc, _, err := c.Kubernetes.KubeconfigWithTTL(context.Background(), clusterID, seconds)
 			if err != nil {
 				return err
 			}
@@ -300,14 +343,15 @@ func newK8sKubeconfigCmd() *cobra.Command {
 				if err := os.WriteFile(save, []byte(kc.Kubeconfig), 0o600); err != nil {
 					return fmt.Errorf("failed to write %s: %w", save, err)
 				}
-				return printActionMessage(fmt.Sprintf("Kubeconfig saved to %s (endpoint %s).", save, kc.APIEndpoint))
+				return printActionMessage(fmt.Sprintf("Static kubeconfig saved to %s (endpoint %s) — expires in %s.", save, kc.APIEndpoint, time.Duration(seconds)*time.Second))
 			}
 			fmt.Print(kc.Kubeconfig)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&save, "save", "", "Write the kubeconfig to this file (mode 0600) instead of stdout")
-	cmd.Flags().StringVar(&ttl, "ttl", "", "Issue a SHORT-LIVED kubeconfig with this lifetime (10m–720h), e.g. --ttl 1h")
+	cmd.Flags().StringVar(&ttl, "ttl", "", "Token lifetime (10m-720h). Default 1h per renewal, or 7 days with --static")
+	cmd.Flags().BoolVar(&static, "static", false, "Embed a token in the file instead of renewing it automatically")
 	cmd.AddCommand(newK8sKubeconfigRotateCmd())
 	return cmd
 }
@@ -764,4 +808,118 @@ func newK8sMaintenanceCmd() *cobra.Command {
 	cmd.Flags().IntVar(&day, "day", 0, "Maintenance day: 0 (Sunday) to 6 (Saturday)")
 	cmd.Flags().IntVar(&start, "start", 0, "Window start hour (UTC); window is 4 hours")
 	return cmd
+}
+
+// newK8sTokenCmd is the credential half of the exec-based kubeconfig: kubectl
+// runs it before each request and reads an ExecCredential from stdout. It is
+// the same contract GKE (gke-gcloud-auth-plugin), EKS (aws eks get-token) and
+// doctl implement, so no long-lived credential is ever written to disk.
+func newK8sTokenCmd() *cobra.Command {
+	var ttl string
+	cmd := &cobra.Command{
+		Use:    "token <cluster-id>",
+		Short:  "Print a short-lived ExecCredential for kubectl (called by the kubeconfig)",
+		Args:   cobra.ExactArgs(1),
+		Hidden: true, // machine interface — humans use 'kubeconfig'
+		RunE: func(cmd *cobra.Command, args []string) error {
+			seconds := 3600
+			if ttl != "" {
+				d, perr := time.ParseDuration(ttl)
+				if perr != nil {
+					return fmt.Errorf("invalid --ttl %q: %w", ttl, perr)
+				}
+				seconds = int(d.Seconds())
+			}
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			kc, _, err := c.Kubernetes.KubeconfigWithTTL(context.Background(), args[0], seconds)
+			if err != nil {
+				return err
+			}
+			token, err := tokenFromKubeconfig(kc.Kubeconfig)
+			if err != nil {
+				return err
+			}
+			// Expire the cached credential slightly early so kubectl renews
+			// before the token actually dies mid-request.
+			expiry := time.Now().Add(time.Duration(seconds)*time.Second - 60*time.Second).UTC()
+			out, err := json.Marshal(map[string]any{
+				"apiVersion": "client.authentication.k8s.io/v1",
+				"kind":       "ExecCredential",
+				"status": map[string]string{
+					"token":               token,
+					"expirationTimestamp": expiry.Format(time.RFC3339),
+				},
+			})
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(out))
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&ttl, "ttl", "", "Token lifetime (default 1h)")
+	return cmd
+}
+
+// tokenFromKubeconfig pulls the bearer token out of a short-lived kubeconfig.
+func tokenFromKubeconfig(kubeconfig string) (string, error) {
+	for _, line := range strings.Split(kubeconfig, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(trimmed, "token:"); ok {
+			return strings.Trim(strings.TrimSpace(after), `"'`), nil
+		}
+	}
+	return "", fmt.Errorf("no token found in the issued kubeconfig")
+}
+
+// execKubeconfig rewrites an issued kubeconfig so the user block calls this
+// CLI for a fresh token instead of carrying one. Server address and CA data
+// are kept verbatim; every credential line is dropped.
+func execKubeconfig(kubeconfig, clusterID string) (string, error) {
+	var server, caData string
+	for _, line := range strings.Split(kubeconfig, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if after, ok := strings.CutPrefix(trimmed, "server:"); ok && server == "" {
+			server = strings.TrimSpace(after)
+		}
+		if after, ok := strings.CutPrefix(trimmed, "certificate-authority-data:"); ok && caData == "" {
+			caData = strings.TrimSpace(after)
+		}
+	}
+	if server == "" {
+		return "", fmt.Errorf("could not read the API server address from the issued kubeconfig")
+	}
+	ca := ""
+	if caData != "" {
+		ca = fmt.Sprintf("    certificate-authority-data: %s\n", caData)
+	}
+	name := "raff-" + clusterID
+	return fmt.Sprintf(`apiVersion: v1
+kind: Config
+clusters:
+- name: %[1]s
+  cluster:
+    server: %[2]s
+%[3]scontexts:
+- name: %[1]s
+  context:
+    cluster: %[1]s
+    user: %[1]s
+current-context: %[1]s
+users:
+- name: %[1]s
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: raff
+      args:
+      - kubernetes
+      - token
+      - %[4]s
+      interactiveMode: Never
+      provideClusterInfo: false
+`, name, server, ca, clusterID), nil
 }
