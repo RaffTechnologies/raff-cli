@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.3.2
 	github.com/google/uuid v1.6.0
 	github.com/oapi-codegen/runtime v1.4.0
-	github.com/rafftechnologies/raff-go v0.5.1
+	github.com/rafftechnologies/raff-go v0.5.2
 	github.com/spf13/cobra v1.9.1
 	gopkg.in/yaml.v3 v3.0.1
 )

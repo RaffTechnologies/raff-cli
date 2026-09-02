@@ -489,9 +489,13 @@ func newAppsEnvListCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("KEY", "VALUE", "SECRET", "SYSTEM")
+			t := output.NewTable("KEY", "VALUE", "SECRET", "SYSTEM", "SCOPE")
 			for _, v := range vars {
-				t.AddRow(v.Key, v.Value, strconv.FormatBool(v.IsSecret), strconv.FormatBool(v.IsSystem))
+				scope := v.Scope
+				if scope == "" {
+					scope = raff.AppEnvScopeRuntime
+				}
+				t.AddRow(v.Key, v.Value, strconv.FormatBool(v.IsSecret), strconv.FormatBool(v.IsSystem), scope)
 			}
 			t.Flush()
 			return nil
@@ -504,28 +508,49 @@ func newAppsEnvListCmd() *cobra.Command {
 func newAppsEnvSetCmd() *cobra.Command {
 	var value string
 	var secret bool
+	var scope string
 	cmd := &cobra.Command{
 		Use:   "set <service> <key>",
 		Short: "Create or update an environment variable",
-		Args:  cobra.ExactArgs(2),
+		Long: `Create or update an environment variable.
+
+By default a variable reaches the running container only. Frameworks that
+inline configuration at build time need --scope build or --scope both:
+Next.js NEXT_PUBLIC_*, Vite VITE_*, Create React App REACT_APP_*, SvelteKit
+and Astro PUBLIC_*. Without it those values ship as empty strings.
+
+Changing a build-scoped variable rebuilds the image rather than restarting
+replicas, so it takes a full build to take effect. Build arguments are
+recoverable from image history, so prefer runtime scope for credentials.`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
 			if err != nil {
 				return err
 			}
+			switch scope {
+			case raff.AppEnvScopeRuntime, raff.AppEnvScopeBuild, raff.AppEnvScopeBoth:
+			default:
+				return fmt.Errorf("invalid --scope %q: expected runtime, build or both", scope)
+			}
 			_, _, err = c.AppServices.SetEnvVar(context.Background(), args[0], &raff.SetAppEnvVarRequest{
 				Key:      args[1],
 				Value:    value,
 				IsSecret: secret,
+				Scope:    scope,
 			})
 			if err != nil {
 				return err
+			}
+			if scope != raff.AppEnvScopeRuntime {
+				return printActionMessage("Environment variable set. Rebuilding the image so the new value is baked in.")
 			}
 			return printActionMessage("Environment variable set.")
 		},
 	}
 	cmd.Flags().StringVar(&value, "value", "", "Variable value (required)")
 	cmd.Flags().BoolVar(&secret, "secret", false, "Store as a secret (masked on read)")
+	cmd.Flags().StringVar(&scope, "scope", "runtime", "Where the value is injected: runtime, build or both")
 	_ = cmd.MarkFlagRequired("value")
 	return cmd
 }
