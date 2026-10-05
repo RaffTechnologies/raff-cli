@@ -105,6 +105,34 @@ func Resolve(flagVal, envKey string, configVal string) string {
 }
 
 // PromptInput reads a line from stdin with an optional default value shown in brackets.
+// PromptSecret is PromptInput for a secret: the stored value is shown only
+// by its first characters, so a configured key never appears on screen.
+func PromptSecret(reader *bufio.Reader, label, defaultVal string) string {
+	shown := ""
+	if defaultVal != "" {
+		shown = MaskSecret(defaultVal)
+	}
+	if shown != "" {
+		fmt.Printf("%s [%s]: ", label, shown)
+	} else {
+		fmt.Printf("%s: ", label)
+	}
+	line, _ := reader.ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return defaultVal
+	}
+	return line
+}
+
+// MaskSecret keeps the first 9 characters ("raff_737e") and hides the rest.
+func MaskSecret(s string) string {
+	if len(s) <= 9 {
+		return strings.Repeat("*", len(s))
+	}
+	return s[:9] + "…"
+}
+
 func PromptInput(reader *bufio.Reader, label, defaultVal string) string {
 	if defaultVal != "" {
 		fmt.Printf("%s [%s]: ", label, defaultVal)

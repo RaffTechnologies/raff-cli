@@ -35,7 +35,7 @@ func newConfigureCmd() *cobra.Command {
 			}
 
 			apiURL := config.PromptInput(reader, "API URL", defaultURL)
-			apiKey := config.PromptInput(reader, "API Key", existing.APIKey)
+			apiKey := config.PromptSecret(reader, "API Key", existing.APIKey)
 			projectID := config.PromptInput(reader, "Default Project ID (optional)", existing.ProjectID)
 
 			cfg.Profiles[profileName] = config.Profile{
