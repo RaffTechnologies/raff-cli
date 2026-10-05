@@ -103,6 +103,7 @@ func init() {
 	rootCmd.AddCommand(newDevCmd())
 	rootCmd.AddCommand(newImportCmd())
 	rootCmd.AddCommand(newKubernetesCmd())
+	rootCmd.AddCommand(newDatabaseCmd())
 }
 
 func Execute() error {
