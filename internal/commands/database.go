@@ -291,6 +291,7 @@ is reachable only inside a VPC.`,
 			if err != nil {
 				return err
 			}
+			waitForPublic(ctx, conn)
 			if printJSONIf(map[string]any{"database": d, "connection": conn}) {
 				return nil
 			}
@@ -318,6 +319,22 @@ is reachable only inside a VPC.`,
 	cmd.Flags().BoolVar(&private, "private", false, "No public access, even without --vpc")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Return at once instead of waiting until the database is running")
 	return cmd
+}
+
+// waitForPublic holds the output until the public address answers, so the
+// connection string works on first use (the gateway routes a new database
+// 10 to 20 seconds after it is running). It only warns when it gives up:
+// an allowlist can keep this machine out while the database is fine.
+func waitForPublic(ctx context.Context, conn *raff.DatabaseConnection) {
+	if raff.StringValue(conn.PublicHost) == "" {
+		return
+	}
+	fmt.Fprintln(os.Stderr, "Waiting for the public address...")
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	if err := raff.WaitForPublicEndpoint(ctx, conn); err != nil {
+		fmt.Fprintf(os.Stderr, "Note: %v. It may need a little longer, or an allowlist keeps this machine out.\n", err)
+	}
 }
 
 func confirm(prompt string) bool {
@@ -997,9 +1014,13 @@ func newDBPublicCmd() *cobra.Command {
 					list = []string{}
 				}
 			}
-			d, _, err := c.Databases.SetPublicAccess(context.Background(), args[0], true, list)
+			ctx := context.Background()
+			d, _, err := c.Databases.SetPublicAccess(ctx, args[0], true, list)
 			if err != nil {
 				return err
+			}
+			if conn, _, err := c.Databases.Connection(ctx, args[0], false); err == nil {
+				waitForPublic(ctx, conn)
 			}
 			if printJSONIf(d) {
 				return nil
