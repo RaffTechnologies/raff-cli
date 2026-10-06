@@ -199,6 +199,13 @@ func freePlanID(ctx context.Context, c *raff.Client, engine raff.DatabaseEngine)
 	return 0, fmt.Errorf("%s has no free plan; pick one with --plan (see 'raff database plans --engine %s')", engine, engine)
 }
 
+// valkeyModePolicy maps 'raff database create --mode' to the Valkey memory
+// policy the API accepts in engine_config.
+var valkeyModePolicy = map[string]string{
+	"queue": "noeviction",
+	"cache": "allkeys-lru",
+}
+
 func randomDBName(engine raff.DatabaseEngine) string {
 	b := make([]byte, 3)
 	_, _ = rand.Read(b)
@@ -218,6 +225,8 @@ func newDBCreateCmd() *cobra.Command {
 		public   bool
 		private  bool
 		noWait   bool
+		exts     []string
+		mode     string
 	)
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -228,9 +237,16 @@ With no flags this creates a free PostgreSQL database with a generated name,
 turns on public access (TLS and a generated password; limit sources later
 with 'raff database public enable --allow') and prints its connection string.
 The free plan is one per account. With --vpc, or with --private, the database
-is reachable only inside a VPC.`,
+is reachable only inside a VPC.
+
+PostgreSQL: --extension turns extensions on before the database is ready
+(vector, pg_trgm, pg_stat_statements, hstore, uuid-ossp, citext, ltree,
+pgcrypto, unaccent). Valkey: --mode queue keeps every key (the default),
+--mode cache drops the least recently used keys when memory is full.`,
 		Example: `  raff database create
+  raff database create --name ai --extension vector
   raff database create --name orders --engine mysql
+  raff database create --name sessions --engine valkey --mode cache
   raff database create --name app --plan 5 --storage 50 --public`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newClient()
@@ -269,6 +285,16 @@ is reachable only inside a VPC.`,
 			}
 			if public || (vpcID == "" && !private) {
 				req.PublicAccess = raff.Bool(true)
+			}
+			if len(exts) > 0 {
+				req.Extensions = &exts
+			}
+			if mode != "" {
+				policy, ok := valkeyModePolicy[mode]
+				if !ok || eng != raff.DatabaseEngine("valkey") {
+					return fmt.Errorf("--mode is for Valkey: queue or cache")
+				}
+				req.EngineConfig = &map[string]string{"maxmemory-policy": policy}
 			}
 			d, _, err := c.Databases.Create(ctx, req)
 			if err != nil {
@@ -318,6 +344,8 @@ is reachable only inside a VPC.`,
 	cmd.Flags().BoolVar(&public, "public", false, "Turn on public access (the default without --vpc)")
 	cmd.Flags().BoolVar(&private, "private", false, "No public access, even without --vpc")
 	cmd.Flags().BoolVar(&noWait, "no-wait", false, "Return at once instead of waiting until the database is running")
+	cmd.Flags().StringSliceVar(&exts, "extension", nil, "PostgreSQL extension to turn on, e.g. vector (repeat or comma-separate)")
+	cmd.Flags().StringVar(&mode, "mode", "", "Valkey: queue (keep every key, default) or cache (drop old keys when full)")
 	return cmd
 }
 
