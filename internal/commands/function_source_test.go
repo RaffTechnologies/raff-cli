@@ -140,3 +140,16 @@ func TestSlugifyName(t *testing.T) {
 		}
 	}
 }
+
+// An app folder keeps its build output: a Dockerfile may copy dist/ or bin/.
+// Secrets and installed dependencies still stay out.
+func TestAppDefaultIgnores(t *testing.T) {
+	for rel, want := range map[string]bool{
+		"dist/index.js": false, "bin/server": false, ".next/BUILD_ID": false,
+		".env": true, "node_modules/x/index.js": true, ".git/HEAD": true, "src/app.ts": false,
+	} {
+		if got := ignoredWith(rel, appDefaultIgnores, nil); got != want {
+			t.Errorf("ignoredWith(%q) = %v, want %v", rel, got, want)
+		}
+	}
+}

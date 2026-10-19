@@ -73,6 +73,14 @@ var defaultIgnores = []string{
 	".DS_Store", ".env", ".raffignore", ".next", "dist", "bin",
 }
 
+// appDefaultIgnores are the defaults for `raff apps deploy --dir`. An app is
+// built from the folder (often by its Dockerfile, which may copy dist/ or
+// bin/), so only secrets, version control and installed dependencies stay out.
+var appDefaultIgnores = []string{
+	".git", "node_modules", ".venv", "venv", "__pycache__",
+	".DS_Store", ".env", ".raffignore",
+}
+
 // loadIgnorePatterns reads .raffignore (one pattern per line, `#` comments;
 // matched against slash-separated paths relative to the project root).
 func loadIgnorePatterns(dir string) []string {
@@ -92,9 +100,13 @@ func loadIgnorePatterns(dir string) []string {
 }
 
 func ignored(rel string, patterns []string) bool {
+	return ignoredWith(rel, defaultIgnores, patterns)
+}
+
+func ignoredWith(rel string, defaults, patterns []string) bool {
 	rel = filepath.ToSlash(rel)
 	base := filepath.Base(rel)
-	for _, p := range append(defaultIgnores, patterns...) {
+	for _, p := range append(append([]string{}, defaults...), patterns...) {
 		p = filepath.ToSlash(p)
 		if rel == p || base == p || strings.HasPrefix(rel, p+"/") {
 			return true
@@ -113,6 +125,11 @@ const maxSourceZipBytes = 100 << 20 // matches the server-side source cap
 
 // zipSourceDir packs dir into a zip, honoring .raffignore + default ignores.
 func zipSourceDir(dir string) ([]byte, int, error) {
+	return zipSourceDirWith(dir, defaultIgnores)
+}
+
+// zipSourceDirWith is zipSourceDir with its own default ignores.
+func zipSourceDirWith(dir string, defaults []string) ([]byte, int, error) {
 	patterns := loadIgnorePatterns(dir)
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
@@ -129,7 +146,7 @@ func zipSourceDir(dir string) ([]byte, int, error) {
 		if rel == "." {
 			return nil
 		}
-		if ignored(rel, patterns) {
+		if ignoredWith(rel, defaults, patterns) {
 			if info.IsDir() {
 				return filepath.SkipDir
 			}
