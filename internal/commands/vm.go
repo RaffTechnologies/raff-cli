@@ -262,7 +262,7 @@ auto-created vpc_id when applicable).`,
 	cmd.Flags().IntVar(&pricingID, "pricing-id", 0, "Pricing plan ID (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region (required)")
 	cmd.Flags().StringVar(&password, "password", "", "Root password")
-	cmd.Flags().StringSliceVar(&sshKeys, "ssh-keys", nil, "SSH key IDs")
+	cmd.Flags().StringSliceVar(&sshKeys, "ssh-keys", nil, "SSH key IDs or public keys")
 	cmd.Flags().IntVar(&extraStorage, "extra-storage", 0, "Extra storage in GB")
 	cmd.Flags().StringVar(&extraStorageType, "extra-storage-type", "", "Extra storage type")
 	cmd.Flags().StringVar(&backupType, "backup-type", "", "Backup type")
@@ -616,7 +616,7 @@ func newVMReinstallCmd() *cobra.Command {
 Authentication options (one of --password or --auto-generate-password is required):
   --password                 Provide a new root password directly
   --auto-generate-password   Auto-generate a password (emailed to account owner)
-  --ssh-keys                 SSH key IDs for Linux VMs (can combine with either password option)`,
+  --ssh-keys                 SSH key IDs or public keys for Linux VMs (can combine with either password option)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if password != "" && autoGeneratePassword {
@@ -665,7 +665,7 @@ Authentication options (one of --password or --auto-generate-password is require
 
 	cmd.Flags().StringVar(&templateID, "template-id", "", "New template ID (required)")
 	cmd.Flags().StringVar(&password, "password", "", "New root password (mutually exclusive with --auto-generate-password)")
-	cmd.Flags().StringSliceVar(&sshKeys, "ssh-keys", nil, "SSH key IDs for Linux VMs (can combine with either password option)")
+	cmd.Flags().StringSliceVar(&sshKeys, "ssh-keys", nil, "SSH key IDs or public keys for Linux VMs (can combine with either password option)")
 	cmd.Flags().BoolVar(&autoGeneratePassword, "auto-generate-password", false, "Auto-generate password and email it to the account owner")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
 

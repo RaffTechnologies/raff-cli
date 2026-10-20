@@ -47,8 +47,7 @@ func newSSHKeyListCmd() *cobra.Command {
 			}
 			t := output.NewTable("ID", "NAME", "TYPE", "FINGERPRINT")
 			for _, k := range keys {
-				fp := keyFingerprint(k.PublicKey)
-				t.AddRow(k.ID.String(), k.Name, string(k.KeyType), fp)
+				t.AddRow(k.ID.String(), k.Name, string(k.KeyType), keyFingerprint(k))
 			}
 			t.Flush()
 			return nil
@@ -79,6 +78,7 @@ func newSSHKeyGetCmd() *cobra.Command {
 				{"ID", k.ID.String()},
 				{"Name", k.Name},
 				{"Type", string(k.KeyType)},
+				{"Fingerprint", keyFingerprint(*k)},
 				{"Public Key", k.PublicKey},
 			})
 			return nil
@@ -188,15 +188,14 @@ func newSSHKeyDeleteCmd() *cobra.Command {
 	return cmd
 }
 
-// keyFingerprint returns the first 8 chars of the base64 portion of an
-// SSH public key — quick visual identifier without bringing in crypto.
-func keyFingerprint(publicKey string) string {
-	parts := strings.Fields(publicKey)
-	if len(parts) < 2 {
-		return ""
+// keyFingerprint is the key's SHA256 fingerprint from the API (as ssh-keygen -l
+// shows it), or why a saved key cannot be used on a server.
+func keyFingerprint(k raff.SSHKey) string {
+	if k.Valid != nil && !*k.Valid {
+		return "not valid: delete it and add the key again"
 	}
-	if len(parts[1]) > 16 {
-		return parts[1][:8] + "…" + parts[1][len(parts[1])-8:]
+	if k.Fingerprint != nil {
+		return *k.Fingerprint
 	}
-	return parts[1]
+	return ""
 }
