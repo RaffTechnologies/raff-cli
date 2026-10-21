@@ -43,6 +43,7 @@ func newVMCmd() *cobra.Command {
 	cmd.AddCommand(newVMSGCmd())
 	cmd.AddCommand(newVMTagsCmd())
 	cmd.AddCommand(newVMNotesCmd())
+	cmd.AddCommand(newVMSSHKeysCmd())
 
 	return cmd
 }

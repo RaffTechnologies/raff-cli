@@ -45,9 +45,9 @@ func newSSHKeyListCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "NAME", "TYPE", "FINGERPRINT")
+			t := output.NewTable("ID", "NAME", "TYPE", "FINGERPRINT", "SERVERS")
 			for _, k := range keys {
-				t.AddRow(k.ID.String(), k.Name, string(k.KeyType), keyFingerprint(k))
+				t.AddRow(k.ID.String(), k.Name, string(k.KeyType), keyFingerprint(k), keyServers(k))
 			}
 			t.Flush()
 			return nil
@@ -198,4 +198,16 @@ func keyFingerprint(k raff.SSHKey) string {
 		return *k.Fingerprint
 	}
 	return ""
+}
+
+// keyServers names the servers where Raff last saw the key (raff vm ssh-keys list reads a server's keys again).
+func keyServers(k raff.SSHKey) string {
+	if k.Servers == nil || len(*k.Servers) == 0 {
+		return "-"
+	}
+	names := make([]string, 0, len(*k.Servers))
+	for _, s := range *k.Servers {
+		names = append(names, raff.StringValue(s.Name))
+	}
+	return strings.Join(names, ", ")
 }
