@@ -113,7 +113,7 @@ func newTemplateListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&category, "category", "", "Filter by category: 'os' (Linux/Windows) or 'marketplace' (pre-baked apps)")
-	cmd.Flags().StringVar(&vmType, "vm-type", "", "Filter by VM type (standard, premium)")
+	cmd.Flags().StringVar(&vmType, "vm-type", "", "Filter by VM type (standard, premium, windows, cost_optimized)")
 	cmd.Flags().StringVar(&region, "region", "", "Filter by region")
 	return cmd
 }

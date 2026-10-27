@@ -78,7 +78,7 @@ func newPricingVMCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&region, "region", "", "Filter by region")
-	cmd.Flags().StringVar(&vmType, "vm-type", "", "Filter by type (standard, premium)")
+	cmd.Flags().StringVar(&vmType, "vm-type", "", "Filter by type (standard, premium, windows, cost_optimized)")
 	return cmd
 }
 
