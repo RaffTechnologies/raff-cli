@@ -158,7 +158,7 @@ func newVMCreateCmd() *cobra.Command {
 	var name, templateID, region, password, extraStorageType, backupType, backupTime, backupDate, vpcID, vpcName, vpcCIDR string
 	var pricingID, extraStorage int
 	var sshKeys, tags []string
-	var noVPC bool
+	var noVPC, autoGeneratePassword bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -195,8 +195,14 @@ auto-created vpc_id when applicable).`,
 				Region:     spec.CreateVMRequestRegion(region),
 			}
 
+			if password != "" && autoGeneratePassword {
+				return fmt.Errorf("--password cannot be combined with --auto-generate-password")
+			}
 			if password != "" {
 				req.Password = raff.String(password)
+			}
+			if autoGeneratePassword {
+				req.AutoGeneratePassword = raff.Bool(true)
 			}
 			if len(sshKeys) > 0 {
 				req.SSHKeys = &sshKeys
@@ -253,6 +259,9 @@ auto-created vpc_id when applicable).`,
 			}
 
 			fmt.Println("VM created successfully.")
+			if autoGeneratePassword {
+				fmt.Println("Its password is emailed to the account once the server is created.")
+			}
 			printVMDetail(vm)
 			return nil
 		},
@@ -262,7 +271,8 @@ auto-created vpc_id when applicable).`,
 	cmd.Flags().StringVar(&templateID, "template-id", "", "Template ID (required)")
 	cmd.Flags().IntVar(&pricingID, "pricing-id", 0, "Pricing plan ID (required)")
 	cmd.Flags().StringVar(&region, "region", "", "Region (required)")
-	cmd.Flags().StringVar(&password, "password", "", "Root password")
+	cmd.Flags().StringVar(&password, "password", "", "Root password (mutually exclusive with --auto-generate-password)")
+	cmd.Flags().BoolVar(&autoGeneratePassword, "auto-generate-password", false, "Raff makes the root or Administrator password and emails it to the account")
 	cmd.Flags().StringSliceVar(&sshKeys, "ssh-keys", nil, "SSH key IDs or public keys")
 	cmd.Flags().IntVar(&extraStorage, "extra-storage", 0, "Extra storage in GB")
 	cmd.Flags().StringVar(&extraStorageType, "extra-storage-type", "", "Extra storage type")

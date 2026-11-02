@@ -96,8 +96,12 @@ func newTemplateListCmd() *cobra.Command {
 				output.PrintJSON(data)
 				return nil
 			}
-			t := output.NewTable("ID", "NAME", "VERSION", "OS", "CATEGORY", "REGION", "MIN CPU/RAM/DISK")
+			t := output.NewTable("ID", "NAME", "VERSION", "OS", "CATEGORY", "REGION", "MIN CPU/RAM/DISK", "WINDOWS LICENCE")
 			for _, tmpl := range templates {
+				licence := ""
+				if tmpl.LicencePricePerMonth != nil {
+					licence = fmt.Sprintf("$%.2f/mo", *tmpl.LicencePricePerMonth)
+				}
 				t.AddRow(
 					tmpl.ID.String(),
 					tmpl.Name,
@@ -106,6 +110,7 @@ func newTemplateListCmd() *cobra.Command {
 					string(tmpl.Category),
 					string(tmpl.Region),
 					fmt.Sprintf("%dvCPU / %dGB / %dGB", tmpl.CPU, tmpl.RAM, tmpl.Storage),
+					licence,
 				)
 			}
 			t.Flush()
