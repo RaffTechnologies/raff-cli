@@ -76,7 +76,12 @@ func dbEngine(d *raff.Database) string {
 		return ""
 	}
 	e := string(*d.Engine)
-	if v := raff.StringValue(d.EngineVersion); v != "" {
+	// The full version the server runs (18.6); the major until the first reading.
+	v := raff.StringValue(d.ServerVersion)
+	if v == "" {
+		v = raff.StringValue(d.EngineVersion)
+	}
+	if v != "" {
 		e += " " + v
 	}
 	return e
