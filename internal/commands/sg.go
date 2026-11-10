@@ -26,6 +26,7 @@ func newSGCmd() *cobra.Command {
 	cmd.AddCommand(newSGCreateCmd())
 	cmd.AddCommand(newSGUpdateCmd())
 	cmd.AddCommand(newSGDeleteCmd())
+	cmd.AddCommand(newSGTagsCmd())
 	return cmd
 }
 
@@ -283,4 +284,90 @@ func newSGDeleteCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompt")
 	return cmd
+}
+
+// ---- Tags ----
+
+func newSGTagsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "tags",
+		Short: "Link a security group to tags: it goes on their servers in its project",
+	}
+	cmd.AddCommand(newSGTagsGetCmd())
+	cmd.AddCommand(newSGTagsSetCmd())
+	return cmd
+}
+
+func newSGTagsGetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get <sg-id>",
+		Short: "Show the tags a security group is linked to and the progress of putting it on their servers",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			ft, _, err := c.SecurityGroups.GetTags(context.Background(), args[0])
+			if err != nil {
+				return err
+			}
+			return printFirewallTags(ft)
+		},
+	}
+	return cmd
+}
+
+func newSGTagsSetCmd() *cobra.Command {
+	var tagIDs []string
+	cmd := &cobra.Command{
+		Use:   "set <sg-id>",
+		Short: "Make these the security group's tags in its project",
+		Long: `Make these the security group's tags in its own project. Raff then puts the
+security group on the public network interfaces of every server of that project
+with one of the tags, in the background (about 20 seconds per server).
+
+Tags left out are unlinked; their servers keep the security group. Pass
+--tag-ids "" to unlink every tag. In a project a tag carries at most one
+security group.
+
+Needs the account.tags.manage permission (account Owner and Admin by default).
+
+To find tag IDs, run:
+
+  raff tag list`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			ft, _, err := c.SecurityGroups.SetTags(context.Background(), args[0], tagIDs)
+			if err != nil {
+				return err
+			}
+			return printFirewallTags(ft)
+		},
+	}
+	cmd.Flags().StringSliceVar(&tagIDs, "tag-ids", nil, "Tag IDs, comma-separated (required; \"\" unlinks every tag)")
+	_ = cmd.MarkFlagRequired("tag-ids")
+	return cmd
+}
+
+func printFirewallTags(ft *raff.FirewallTags) error {
+	if outputFormat() == output.FormatJSON {
+		data, _ := json.Marshal(ft)
+		output.PrintJSON(data)
+		return nil
+	}
+	t := output.NewTable("TAG ID", "TAG NAME")
+	for _, l := range ft.Links {
+		t.AddRow(l.TagID.String(), l.TagName)
+	}
+	t.Flush()
+	jc := ft.JobCounts
+	fmt.Println()
+	fmt.Printf("Servers (last day): pending %d, running %d, done %d, failed %d, conflict %d, skipped %d\n",
+		intValue(jc.Pending), intValue(jc.Running), intValue(jc.Done), intValue(jc.Failed), intValue(jc.Conflict), intValue(jc.Skipped))
+	return nil
 }

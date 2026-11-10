@@ -155,10 +155,10 @@ func newVMGetCmd() *cobra.Command {
 }
 
 func newVMCreateCmd() *cobra.Command {
-	var name, templateID, region, password, extraStorageType, backupType, backupTime, backupDate, vpcID, vpcName, vpcCIDR string
+	var name, templateID, region, password, extraStorageType, backupType, backupTime, backupDate, vpcID, vpcName, vpcCIDR, securityGroupID string
 	var pricingID, extraStorage int
 	var sshKeys, tags []string
-	var noVPC, autoGeneratePassword bool
+	var noVPC, autoGeneratePassword, skipPublicIP, enableIPv6 bool
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -172,8 +172,17 @@ Networking:
   - --no-vpc                    skip VPC entirely; the VM has only a public IP
   - (none of the above)         auto-create a VPC named vpc-<vm-name>-<short hash>;
                                 it tears down with the last VM that uses it
+  - --skip-public-ip            no public IPv4; the VM is reached on its VPC private IP
+                                (or on IPv6 with --ipv6)
+  - --ipv6                      also give the VM a public IPv6 address from its node
 
 --no-vpc cannot be combined with --skip-public-ip (the VM would have no network).
+
+Firewall:
+  - --security-group-id <uuid>  the cloud firewall the VM's public IPs carry from the
+                                first boot, in place of the Raff Default Firewall; it
+                                must be in the same project as the VM
+  - (not set)                   the Raff Default Firewall
 
 Tip: pass --output json to capture the response programmatically (includes the
 auto-created vpc_id when applicable).`,
@@ -246,6 +255,25 @@ auto-created vpc_id when applicable).`,
 				}
 				req.SkipVpc = raff.Bool(true)
 			}
+			if skipPublicIP {
+				if noVPC {
+					return fmt.Errorf("--no-vpc cannot be combined with --skip-public-ip (the VM would have no network)")
+				}
+				req.SkipPublicIP = raff.Bool(true)
+			}
+			if enableIPv6 {
+				req.EnableIpv6 = raff.Bool(true)
+			}
+			if securityGroupID != "" {
+				if skipPublicIP && !enableIPv6 {
+					return fmt.Errorf("--security-group-id needs a public address: drop --skip-public-ip or add --ipv6")
+				}
+				id, err := uuid.Parse(securityGroupID)
+				if err != nil {
+					return fmt.Errorf("invalid security-group-id: %w", err)
+				}
+				req.SecurityGroupID = &id
+			}
 
 			vm, _, err := c.VMs.Create(context.Background(), req)
 			if err != nil {
@@ -279,11 +307,14 @@ auto-created vpc_id when applicable).`,
 	cmd.Flags().StringVar(&backupType, "backup-type", "", "Backup type")
 	cmd.Flags().StringVar(&backupTime, "backup-time", "", "Backup time")
 	cmd.Flags().StringVar(&backupDate, "backup-date", "", "Backup date")
-	cmd.Flags().StringSliceVar(&tags, "tags", nil, "Tags")
+	cmd.Flags().StringSliceVar(&tags, "tags", nil, "Tags; when they carry one firewall in the project (and --security-group-id is not set), the VM gets it from the first boot")
 	cmd.Flags().StringVar(&vpcID, "vpc-id", "", "Attach to this existing VPC (UUID)")
 	cmd.Flags().StringVar(&vpcName, "vpc-name", "", "Create a new VPC with this name (requires --vpc-cidr)")
 	cmd.Flags().StringVar(&vpcCIDR, "vpc-cidr", "", "CIDR for the new VPC (e.g. 10.0.0.0/24)")
 	cmd.Flags().BoolVar(&noVPC, "no-vpc", false, "Create the VM with only a public IP — no VPC at all")
+	cmd.Flags().BoolVar(&skipPublicIP, "skip-public-ip", false, "Create the VM without a public IPv4 (reached on its VPC private IP, or IPv6 with --ipv6)")
+	cmd.Flags().BoolVar(&enableIPv6, "ipv6", false, "Also give the VM a public IPv6 address")
+	cmd.Flags().StringVar(&securityGroupID, "security-group-id", "", "Cloud firewall (UUID) for the VM's public IPs from the first boot; same project as the VM")
 
 	_ = cmd.MarkFlagRequired("name")
 	_ = cmd.MarkFlagRequired("template-id")
@@ -1237,10 +1268,12 @@ To find tag IDs for a VM, run:
 
 func newVMTagRemoveCmd() *cobra.Command {
 	var tagID string
+	var resetFirewall bool
 	cmd := &cobra.Command{
 		Use:   "remove <vm-id>",
 		Short: "Remove a tag from a VM",
-		Long: `Remove a tag from a VM.
+		Long: `Remove a tag from a VM. A firewall the tag put on the VM stays on it;
+--reset-firewall also puts the VM back on the Raff Default Firewall.
 
 To find tag IDs for a VM, run:
 
@@ -1251,7 +1284,7 @@ To find tag IDs for a VM, run:
 			if err != nil {
 				return err
 			}
-			tags, _, err := c.VMs.RemoveTag(context.Background(), args[0], tagID)
+			tags, _, err := c.VMs.RemoveTag(context.Background(), args[0], tagID, &raff.RemoveVMTagOptions{ResetFirewall: resetFirewall})
 			if err != nil {
 				return err
 			}
@@ -1259,6 +1292,7 @@ To find tag IDs for a VM, run:
 		},
 	}
 	cmd.Flags().StringVar(&tagID, "tag-id", "", "Tag ID to remove (required)")
+	cmd.Flags().BoolVar(&resetFirewall, "reset-firewall", false, "Also put the VM back on the Raff Default Firewall (the tag's firewall stays otherwise)")
 	_ = cmd.MarkFlagRequired("tag-id")
 	return cmd
 }

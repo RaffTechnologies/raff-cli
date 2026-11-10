@@ -85,6 +85,7 @@ func init() {
 	rootCmd.AddCommand(newVPCCmd())
 	rootCmd.AddCommand(newIPCmd())
 	rootCmd.AddCommand(newSGCmd())
+	rootCmd.AddCommand(newTagCmd())
 	rootCmd.AddCommand(newSSHKeyCmd())
 	rootCmd.AddCommand(newAPIKeyCmd())
 	rootCmd.AddCommand(newMemberCmd())
