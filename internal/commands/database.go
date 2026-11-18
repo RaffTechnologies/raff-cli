@@ -555,12 +555,24 @@ func newDBConnectionCmd() *cobra.Command {
 					[2]string{"Public host", fmt.Sprintf("%s:%d", pub, raff.IntValue(conn.PublicPort))},
 					[2]string{"Public URI", raff.StringValue(conn.PublicConnectionURI)})
 			}
+			// Read address: a PostgreSQL with read replicas. Queries there go
+			// to the replicas and writes are refused.
+			if ro := raff.StringValue(conn.PublicReadHost); ro != "" {
+				pairs = append(pairs,
+					[2]string{"Public read host", fmt.Sprintf("%s:%d (read replicas)", ro, raff.IntValue(conn.PublicReadPort))},
+					[2]string{"Public read URI", raff.StringValue(conn.PublicReadConnectionURI)})
+			}
 			pairs = append(pairs,
 				[2]string{"Private host", fmt.Sprintf("%s:%d (inside the VPC)", raff.StringValue(conn.Host), raff.IntValue(conn.Port))},
 				[2]string{"Private URI", raff.StringValue(conn.ConnectionURI)})
 			if !strings.Contains(raff.StringValue(conn.Host), ".") {
 				// No VPC: the private address is cluster-internal, not usable.
 				pairs = pairs[:len(pairs)-2]
+			}
+			if ro := raff.StringValue(conn.ReadHost); ro != "" {
+				pairs = append(pairs,
+					[2]string{"Private read host", fmt.Sprintf("%s:%d (read replicas, inside the VPC)", ro, raff.IntValue(conn.ReadPort))},
+					[2]string{"Private read URI", raff.StringValue(conn.ReadConnectionURI)})
 			}
 			output.PrintDetail(pairs)
 			// Kafka has no URI scheme and its clients must trust the CA.
