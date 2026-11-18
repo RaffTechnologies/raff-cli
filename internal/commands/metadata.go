@@ -99,7 +99,10 @@ func newTemplateListCmd() *cobra.Command {
 			t := output.NewTable("ID", "NAME", "VERSION", "OS", "CATEGORY", "REGION", "MIN CPU/RAM/DISK", "WINDOWS LICENCE")
 			for _, tmpl := range templates {
 				licence := ""
-				if tmpl.LicencePricePerMonth != nil {
+				switch {
+				case tmpl.LicencePricePerVcpuMonth != nil && tmpl.LicenceMinVcpu != nil:
+					licence = fmt.Sprintf("$%.2f/vCPU/mo (min %d vCPU)", *tmpl.LicencePricePerVcpuMonth, *tmpl.LicenceMinVcpu)
+				case tmpl.LicencePricePerMonth != nil:
 					licence = fmt.Sprintf("$%.2f/mo", *tmpl.LicencePricePerMonth)
 				}
 				t.AddRow(
