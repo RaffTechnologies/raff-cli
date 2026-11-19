@@ -245,9 +245,9 @@ The free plan is one per account. With --vpc, or with --private, the database
 is reachable only inside a VPC.
 
 PostgreSQL: --extension turns extensions on before the database is ready
-(vector, pg_trgm, pg_stat_statements, hstore, uuid-ossp, citext, ltree,
-pgcrypto, unaccent). Valkey: --mode queue keeps every key (the default),
---mode cache drops the least recently used keys when memory is full.`,
+(vector, postgis, pg_cron, pg_trgm, pg_stat_statements, hstore, uuid-ossp,
+citext, ltree, pgcrypto, unaccent). Valkey: --mode queue keeps every key (the
+default), --mode cache drops the least recently used keys when memory is full.`,
 		Example: `  raff database create
   raff database create --name ai --extension vector
   raff database create --name orders --engine mysql
