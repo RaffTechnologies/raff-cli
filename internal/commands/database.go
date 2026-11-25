@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -38,6 +39,7 @@ func newDatabaseCmd() *cobra.Command {
 	cmd.AddCommand(newDBUsersCmd())
 	cmd.AddCommand(newDBBackupsCmd())
 	cmd.AddCommand(newDBRestoreCmd())
+	cmd.AddCommand(newDBUpgradeCmd())
 	cmd.AddCommand(newDBPublicCmd())
 	cmd.AddCommand(newDBVPCCmd())
 	cmd.AddCommand(newDBMetricsCmd())
@@ -135,13 +137,23 @@ func printDatabaseDetail(d *raff.Database) {
 		{"ID", raff.StringValue(d.DatabaseID)},
 		{"Name", raff.StringValue(d.Name)},
 		{"Engine", dbEngine(d)},
+	}
+	if d.UpgradeVersions != nil && len(*d.UpgradeVersions) > 0 {
+		pairs = append(pairs, [2]string{"Can upgrade to", strings.Join(*d.UpgradeVersions, ", ")})
+	} else if note := raff.StringValue(d.UpgradeNote); note != "" {
+		pairs = append(pairs, [2]string{"Upgrade", note})
+	}
+	if u := d.LastVersionUpgrade; u != nil {
+		pairs = append(pairs, [2]string{"Last upgrade", describeUpgrade(u)})
+	}
+	pairs = append(pairs, [][2]string{
 		{"Status", dbStatus(d)},
 		{"Plan", strconv.Itoa(raff.IntValue(d.PlanID))},
 		{"Free tier", yesNo(raff.BoolValue(d.IsFree))},
 		{"Storage", fmt.Sprintf("%d GB", raff.IntValue(d.StorageGb))},
 		{"High availability", yesNo(raff.BoolValue(d.HaEnabled))},
 		{"Read replicas", strconv.Itoa(raff.IntValue(d.ReplicaCount))},
-	}
+	}...)
 	if raff.StringValue(d.VpcID) != "" {
 		pairs = append(pairs, [2]string{"Private host", fmt.Sprintf("%s:%d", raff.StringValue(d.ConnectionHost), raff.IntValue(d.ConnectionPort))})
 	} else {
@@ -165,6 +177,37 @@ func printDatabaseDetail(d *raff.Database) {
 		pairs = append(pairs, [2]string{"Created", d.CreatedAt.Format(time.RFC3339)})
 	}
 	output.PrintDetail(pairs)
+}
+
+// describeUpgrade puts the last upgrade to a newer major version in one line.
+func describeUpgrade(u *raff.DatabaseVersionUpgrade) string {
+	from, to := raff.StringValue(u.FromVersion), raff.StringValue(u.ToVersion)
+	when := raff.StringValue(u.FinishedAt)
+	if when == "" {
+		when = raff.StringValue(u.StartedAt)
+	}
+	state := raff.DatabaseVersionUpgradeState("")
+	if u.State != nil {
+		state = *u.State
+	}
+	switch state {
+	case raff.DatabaseUpgradeDone:
+		return fmt.Sprintf("Upgraded from %s to %s on %s", from, to, when)
+	case raff.DatabaseUpgradeAnalyzing:
+		return fmt.Sprintf("Upgraded from %s to %s on %s (refreshing statistics)", from, to, when)
+	case raff.DatabaseUpgradeUndone:
+		return fmt.Sprintf("Upgraded from %s to %s on %s, later returned to %s from a backup", from, to, when, from)
+	case raff.DatabaseUpgradeFailed:
+		s := fmt.Sprintf("Upgrade from %s to %s on %s did not go through", from, to, when)
+		if msg := raff.StringValue(u.Message); msg != "" {
+			s += ": " + msg
+		}
+		return s
+	case raff.DatabaseUpgradeReverting:
+		return fmt.Sprintf("Upgrade from %s to %s could not complete; returning to %s (started %s)", from, to, from, when)
+	default:
+		return fmt.Sprintf("Upgrading from %s to %s (%s, started %s)", from, to, strings.ReplaceAll(string(state), "_", " "), when)
+	}
 }
 
 func newDBGetCmd() *cobra.Command {
@@ -906,9 +949,15 @@ func newDBBackupsCmd() *cobra.Command {
 			if printJSONIf(backups) {
 				return nil
 			}
-			t := output.NewTable("BACKUP ID", "TYPE", "STATUS", "TAKEN AT", "SIZE", "RESTORABLE")
+			t := output.NewTable("BACKUP ID", "TYPE", "VERSION", "STATUS", "TAKEN AT", "SIZE", "RESTORABLE")
 			windowStart := ""
+			older := false
 			for _, b := range backups {
+				version := raff.StringValue(b.EngineVersion)
+				if raff.BoolValue(b.BeforeUpgrade) {
+					version += " (before upgrade)"
+					older = true
+				}
 				typ, status := "", ""
 				if b.BackupType != nil {
 					typ = string(*b.BackupType)
@@ -920,13 +969,16 @@ func newDBBackupsCmd() *cobra.Command {
 				if b.ID != nil {
 					id = b.ID.String()
 				}
-				t.AddRow(id, typ, status, raff.StringValue(b.BackupTimestamp),
+				t.AddRow(id, typ, version, status, raff.StringValue(b.BackupTimestamp),
 					fmt.Sprintf("%.1f MB", float64(raff.IntValue(b.SizeBytes))/1e6), yesNo(raff.BoolValue(b.Restorable)))
 				if w := raff.StringValue(b.RestoreWindowStart); w != "" {
 					windowStart = w
 				}
 			}
 			t.Flush()
+			if older {
+				fmt.Fprintln(os.Stderr, "\nBackups marked (before upgrade) hold the version from before the last upgrade. Restoring one with --in-place returns the database to that version and loses everything written since the upgrade.")
+			}
 			if windowStart != "" {
 				fmt.Fprintf(os.Stderr, "\nPoint-in-time restore available from %s until now.\n", windowStart)
 			}
@@ -971,6 +1023,10 @@ func newDBRestoreCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "restore <database-id>",
 		Short: "Restore to a backup or point in time, into a new database or in place",
+		Long: `Restore to a backup or point in time, into a new database or in place.
+
+Restoring a backup from before an upgrade over the database (--in-place)
+returns it to the older version and loses everything written since the upgrade.`,
 		Example: `  raff database restore a1b2c3d4 --time 2026-10-05T09:30:00Z
   raff database restore a1b2c3d4 --backup 9e1f5a7e-... --name orders-copy
   raff database restore a1b2c3d4 --in-place --time 2026-10-05T09:30:00Z`,
@@ -1032,6 +1088,109 @@ func newDBRestoreCmd() *cobra.Command {
 	cmd.Flags().StringVar(&newName, "name", "", "Name for the new database")
 	cmd.Flags().BoolVar(&ha, "ha", false, "High availability on the new database")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip the confirmation prompt for --in-place")
+	return cmd
+}
+
+// upgradeWaitTimeout bounds 'raff database upgrade --wait'. A database with
+// many tables takes longer than the minute a small one needs.
+const upgradeWaitTimeout = time.Hour
+
+// upgradeOptions explains, when --version is missing, which versions the
+// database can take or why it can take none.
+func upgradeOptions(d *raff.Database, id string) string {
+	if d.UpgradeVersions != nil && len(*d.UpgradeVersions) > 0 {
+		versions := *d.UpgradeVersions
+		return fmt.Sprintf("This database can be upgraded to: %s. Run: raff database upgrade %s --version %s",
+			strings.Join(versions, ", "), id, versions[0])
+	}
+	if note := raff.StringValue(d.UpgradeNote); note != "" {
+		return note
+	}
+	if d.Engine != nil && *d.Engine != raff.DatabaseEngine("postgres") {
+		return "Only PostgreSQL databases can be upgraded to a newer major version."
+	}
+	return "This database is on the newest version."
+}
+
+func newDBUpgradeCmd() *cobra.Command {
+	var (
+		version string
+		force   bool
+		wait    bool
+	)
+	cmd := &cobra.Command{
+		Use:   "upgrade <database-id>",
+		Short: "Upgrade a PostgreSQL database to a newer major version",
+		Long: `Upgrade a PostgreSQL database to a newer major version.
+
+A backup is taken first. The database is then offline while it upgrades:
+about a minute for a small database, longer with many tables. If the upgrade
+cannot complete, the database returns to its version by itself, unchanged.
+Nothing is upgraded automatically.
+
+Run it without --version to see the versions the database can take. To go
+back after an upgrade, restore a backup from before it ('raff database
+backups list' marks them), over the database with --in-place or as a new
+database.`,
+		Example: `  raff database upgrade a1b2c3d4
+  raff database upgrade a1b2c3d4 --version 19
+  raff database upgrade a1b2c3d4 --version 19 --wait --force`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			id := args[0]
+			c, err := newClient()
+			if err != nil {
+				return err
+			}
+			ctx := context.Background()
+			if version == "" {
+				d, _, err := c.Databases.Get(ctx, id)
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("--version is required. %s", upgradeOptions(d, id))
+			}
+			if !force && !confirm(fmt.Sprintf("Upgrade database %s to PostgreSQL %s? A backup is taken first, then the database is offline while it upgrades.\n"+
+				"If the upgrade cannot complete, the database returns to its version by itself, unchanged. Continue?", id, version)) {
+				fmt.Println("Aborted.")
+				return nil
+			}
+			d, _, err := c.Databases.Upgrade(ctx, id, version)
+			if err != nil {
+				return err
+			}
+			if !wait {
+				if printJSONIf(d) {
+					return nil
+				}
+				return printActionMessage(fmt.Sprintf("Upgrade of %s to PostgreSQL %s started. Follow it with 'raff database get %s'.", id, version, id))
+			}
+			fmt.Fprintf(os.Stderr, "Upgrading %s to PostgreSQL %s...\n", id, version)
+			waitCtx, cancel := context.WithTimeout(ctx, upgradeWaitTimeout)
+			defer cancel()
+			d, err = c.Databases.WaitForUpgrade(waitCtx, id, version)
+			var upErr *raff.UpgradeError
+			switch {
+			case errors.As(err, &upErr):
+				return errors.New(upErr.Message)
+			case errors.Is(err, context.DeadlineExceeded):
+				return fmt.Errorf("still upgrading after an hour. It goes on without the CLI: follow it with 'raff database get %s'", id)
+			case err != nil:
+				return err
+			}
+			if printJSONIf(d) {
+				return nil
+			}
+			name := raff.StringValue(d.Name)
+			if name == "" {
+				name = id
+			}
+			return printActionMessage(fmt.Sprintf("%s now runs PostgreSQL %s.", name, version))
+		},
+	}
+	cmd.Flags().StringVar(&version, "version", "", "Major version to upgrade to, e.g. 19 (leave out to see the choices)")
+	cmd.Flags().BoolVar(&force, "force", false, "Skip the confirmation prompt")
+	cmd.Flags().BoolVar(&wait, "wait", false, "Wait until the upgrade has ended and print the result")
 	return cmd
 }
 
